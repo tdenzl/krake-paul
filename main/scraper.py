@@ -79,47 +79,6 @@ class Scraper:
             stats_away_list.append(stats_away[i].text)
         return stats_home_list, stats_away_list
 
-    def _get_line_ups(self, URL, season, match_day):
-        page = requests.get(URL)
-        soup = BeautifulSoup(page.content, 'html.parser')
-
-        home_line_up = soup.findAll('div', {'class': 'kick__lineup-field__field-half kick__lineup-field__field-half--top'})
-        away_line_up = soup.findAll('div', {'class': 'kick__lineup-field__field-half kick__lineup-field__field-half--bottom'})
-        home_team_link = None
-        away_team_link = None
-        for element in home_line_up:
-            if element.find("a") is not None:
-                home_team_link = element.find("a").get("href").split("/")[1]
-        for element in away_line_up:
-            if element.find("a") is not None:
-                away_team_link = element.find("a").get("href").split("/")[1]
-
-        player_infos = []
-
-        substitutions = {"in": dict(), "out": dict()}
-        player_subs = soup.findAll('div', {'class': 'kick__ticker__row'})
-        for element in player_subs:
-            for sub_minute in element.findAll('div', {'class': 'kick__ticker__cell-info'}):
-                minute = sub_minute.text
-            sub_players = element.findAll('a')
-            player_in = sub_players[0].get('href').split("/")[1] + "/" + sub_players[0].get('href').split("/")[2]
-            player_out = sub_players[1].get('href').split("/")[1] + "/" + sub_players[1].get('href').split("/")[2]
-            substitutions["in"][player_in] = minute
-            substitutions["out"][player_out] = minute
-
-        for element in home_line_up:
-            players = element.findAll('a', {'class': 'kick__lineup-player-card'})
-            for player in players:
-                player_link = player.get('href').split("/")[1] + "/" + player.get('href').split("/")[2]
-                player_infos.append([season, match_day, "home", home_team_link, player_link, substitutions.get("in").get(player_link), substitutions.get("out").get(player_link)])
-
-        for element in away_line_up:
-            players = element.findAll('a', {'class': 'kick__lineup-player-card'})
-            for player in players:
-                player_link = player.get('href').split("/")[1] + "/" + player.get('href').split("/")[2]
-                player_infos.append([season, match_day, "away", away_team_link, player_link, substitutions.get("in").get(player_link), substitutions.get("out").get(player_link)])
-
-        print(player_infos)
 
     def _get_schema(self, URL, season, match_day):
         page = requests.get(URL)
@@ -154,8 +113,10 @@ class Scraper:
 
         for p, player in enumerate(substitution_players):
             player_link = player.get('href').split("/")[1] + "/" + player.get('href').split("/")[2]
-            if p % 2 == 0: substitution_dict["in"][player_link] = substitution_times[int(p/2)].text
-            if p % 2 == 1: substitution_dict["out"][player_link] = substitution_times[int(p/2)].text
+            if p % 2 == 0:
+                substitution_dict["in"][player_link] = substitution_times[p].text
+            if p % 2 == 1:
+                substitution_dict["out"][player_link] = substitution_times[p-1].text
 
         for event in cards:
             player_link = None
@@ -164,40 +125,42 @@ class Scraper:
             yellow_card = 0
             yellow_red_card = 0
             red_card = 0
-            for e in event.findAll('a', {'class': 'kick__substitutions__player'}):
-                player_link = e.get('href').split("/")[1] + "/" + player.get('href').split("/")[2]
-            for e in event.findAll('div', {'class': 'kick__substitutions__time'}):
-                card_time =  e.text
-            for e in event.findAll('span', {'class': 'kick__substitutions__player-subtxt'}):
-                card_description =  e.text
+            for pl in event.findAll('a', {'class': 'kick__substitutions__player'}):
+                player_link = pl.get('href').split("/")[1] + "/" + player.get('href').split("/")[2]
+            for ct in event.findAll('div', {'class': 'kick__substitutions__time'}):
+                card_time = ct.text
+            for cd in event.findAll('span', {'class': 'kick__substitutions__player-subtxt'}):
+                card_description = cd.text
             for e in event.findAll('span', {'class': 'kick__ticker-icon kick__ticker-icon-color--yellow kick__icon-Gelb'}):
-                yellow_card += 1
+                yellow_card = 1
             for e in event.findAll('span', {'class': 'kick__ticker-icon kick__ticker-icon-color--red kick__icon-Gelb'}):
-                yellow_red_card += 1
+                yellow_red_card = 1
             for e in event.findAll('span', {'class': 'kick__ticker-icon kick__ticker-icon-color--red kick__icon-Rot'}):
-                red_card += 1
-            card_dict
-
-
-
-        print(substitution_dict)
+                red_card = 1
+            card_dict[player_link] = {"card_time":card_time,"card_description":card_description,"yellow_card":yellow_card,"yellow_red_card":yellow_red_card,"red_card":red_card}
 
         line_up_dict = {}
         coaches = []
         line_ups = {"home": soup.findAll('div', {'class': 'kick__lineup__team kick__lineup__team--left'}),\
                     "away": soup.findAll('div', {'class': 'kick__lineup__team kick__lineup__team--right'})}
 
+        #print(card_dict)
+
         for indicator, line_up in line_ups.items():
             for element in line_up:
                 players = element.findAll('a')
                 for player in players:
                     name = player.get("href").split("/")[1] + "/" + player.get('href').split("/")[2]
+
                     if "/spieler" in player.get("href"):
-                        line_up_dict[name] = {"season": season, "match_day": match_day, "indicator": indicator, "goals": scorer_dict.get(name)}
+                        #line_up_dict[name] = {"season": season, "match_day": match_day, "indicator": indicator, "goals": scorer_dict.get(name), "sub_in": substitution_dict.get("in").get(name), "sub_out": substitution_dict.get("out").get(name)}
+                        card_entry = card_dict.get(name)
+                        if card_entry is None: card_entry = {}
+                        line_up_dict[name] = [season, match_day, indicator, scorer_dict.get(name), substitution_dict.get("in").get(name), substitution_dict.get("out").get(name), card_entry.get("card_time"), card_entry.get("card_description"), card_entry.get("yellow_card"), card_entry.get("yellow_red_card"), card_entry.get("red_card")]
                     if "/trainer" in player.get("href"):
                         coaches.append([season, match_day, "home", name])
 
-        print(scorer_dict)
+        #print(scorer_dict)
         print(line_up_dict)
         print(coaches)
 
