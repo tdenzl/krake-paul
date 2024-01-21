@@ -22,7 +22,8 @@ class Scraper:
         self.matchdays = matchdays
         # data dicts
         self.match_data = []
-        self.line_up_data = []
+        self.schema_data = []
+        self.coach_data = []
 
     def scrape(self):
         for season in tqdm(range(self.start_season, self.end_season, 1)):
@@ -32,16 +33,16 @@ class Scraper:
     def _get_match_data(self, start_year, end_year, match_day):
         season = str(start_year) + '-' + str(end_year)
         link_dict = self._get_links_matchday(season, match_day)
-        """
+
         for link in link_dict.get("match_stats"):
             stats_home_list, stats_away_list = self._get_match_stats(link, season, match_day)
             self.match_data.append(stats_home_list)
             self.match_data.append(stats_away_list)
         print("finished getting match stats")
-        """
+
         for link in link_dict.get("schema"):
             self._get_schema(link, season, match_day)
-        print("finished getting schema")
+        print("finished getting player_performance and coaches")
 
     def _get_links_matchday(self, season, match_day):
         URL = self.base_url + "/" + self.league + "/spieltag/20" + str(season) + '/' + str(match_day)
@@ -139,12 +140,8 @@ class Scraper:
                 red_card = 1
             card_dict[player_link] = {"card_time":card_time,"card_description":card_description,"yellow_card":yellow_card,"yellow_red_card":yellow_red_card,"red_card":red_card}
 
-        line_up_dict = {}
-        coaches = []
         line_ups = {"home": soup.findAll('div', {'class': 'kick__lineup__team kick__lineup__team--left'}),\
                     "away": soup.findAll('div', {'class': 'kick__lineup__team kick__lineup__team--right'})}
-
-        #print(card_dict)
 
         for indicator, line_up in line_ups.items():
             for element in line_up:
@@ -156,16 +153,12 @@ class Scraper:
                         #line_up_dict[name] = {"season": season, "match_day": match_day, "indicator": indicator, "goals": scorer_dict.get(name), "sub_in": substitution_dict.get("in").get(name), "sub_out": substitution_dict.get("out").get(name)}
                         card_entry = card_dict.get(name)
                         if card_entry is None: card_entry = {}
-                        line_up_dict[name] = [season, match_day, indicator, scorer_dict.get(name), substitution_dict.get("in").get(name), substitution_dict.get("out").get(name), card_entry.get("card_time"), card_entry.get("card_description"), card_entry.get("yellow_card"), card_entry.get("yellow_red_card"), card_entry.get("red_card")]
+                        self.schema_data.append([season, match_day, indicator, name, scorer_dict.get(name), substitution_dict.get("in").get(name), substitution_dict.get("out").get(name), card_entry.get("card_time"), card_entry.get("card_description"), card_entry.get("yellow_card"), card_entry.get("yellow_red_card"), card_entry.get("red_card")])
                     if "/trainer" in player.get("href"):
-                        coaches.append([season, match_day, "home", name])
-
-        #print(scorer_dict)
-        print(line_up_dict)
-        print(coaches)
+                        self.coach_data.append([season, match_day, indicator, name])
 
     def store_data(self, league_code):
-        df_match_stats = pd.DataFrame(self.match_data, columns=['season',
+        df_match_data = pd.DataFrame(self.match_data, columns=['season',
                                               'matchday',
                                               'indicator',
                                               'team_name',
@@ -184,9 +177,35 @@ class Scraper:
                                               'fouls',
                                               'got_fouled',
                                               'offside',
-                                              'corners',])
-        df_match_stats["league_code"] = league_code
-        df_match_stats.to_csv("./data/match_stats/"+ str(self.league) + "_" + str(self.start_season) + "_" + str(self.end_season) + ".csv", index=False)
+                                              'corners'])
+        df_match_data["league_code"] = league_code
+        df_match_data.to_csv("./data/match_stats/"+ str(self.league) + "_" + str(self.start_season) + "_" + str(self.end_season) + ".csv", index=False)
+
+        df_player_performance = pd.DataFrame(self.schema_data, columns=['season',
+                                                                'matchday',
+                                                                'indicator',
+                                                                'name'
+                                                                'goals',
+                                                                'sub_in',
+                                                                'sub_out',
+                                                                'card_time',
+                                                                'card_time',
+                                                                'card_description',
+                                                                'yellow_card',
+                                                                'yellow_red_card',
+                                                                'red_card'])
+        df_player_performance["league_code"] = league_code
+        df_player_performance.to_csv("./data/player_performance/" + str(self.league) + "_" + str(self.start_season) + "_" + str(
+            self.end_season) + ".csv", index=False)
+
+        df_coaches = pd.DataFrame(self.coach_data, columns=['season',
+                                                             'matchday',
+                                                             'indicator',
+                                                             'name'])
+        df_coaches["league_code"] = league_code
+        df_coaches.to_csv(
+            "./data/coaches/" + str(self.league) + "_" + str(self.start_season) + "_" + str(
+                self.end_season) + ".csv", index=False)
 
     def set_start_season(self, start_season):
         self.start_season = start_season
