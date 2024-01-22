@@ -1,0 +1,22 @@
+{
+  "match_stats": {
+    "Tore": "goals",
+    "Torschüsse": "shots_on_goal",
+    "Laufleistung": "distance",
+    "gespielte Pässe": "total_passes",
+    "Passquote": "pass_ratio",
+    "Flanken": "crosses",
+    "% angekommene Flanken": "cross_ratio",
+    "Dribbling": "dribblings",
+    "% erfolgreiche Dribblings": "dribble_reatio",
+    "Ballbesitz": "possession",
+    "Zweikämpfe": "tackles",
+    "Zweikampfquote": "tackle_ratio",
+    "Luftzweikämpfe": "air_tackles",
+    "% Luftzweikämpfe": "air_tackle_ratio",
+    "Foul/Hand gespielt": "fouls",
+    "Gefoult worden": "got_fouled",
+    "Abseits": "offside",
+    "Ecken": "corners"
+  }
+}

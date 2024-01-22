@@ -8,3 +8,4 @@ class Executor:
             scraper = Scraper(league, 21, 22, 1)
             scraper.scrape()
             scraper.store_data(code)
+            print("finished ", league, " scraping")

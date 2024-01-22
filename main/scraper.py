@@ -20,10 +20,12 @@ class Scraper:
         self.start_season = start_season
         self.end_season = end_season
         self.matchdays = matchdays
+        self.mappings =  json.load(open('./config/mapping_columns.json', 'r'))
         # data dicts
-        self.match_data = []
-        self.schema_data = []
-        self.coach_data = []
+        self.match_info = []
+        self.team_stats = []
+        self.player_stats = []
+        self.player_attributes = []
 
     def scrape(self):
         for season in tqdm(range(self.start_season, self.end_season, 1)):
@@ -34,54 +36,69 @@ class Scraper:
         season = str(start_year) + '-' + str(end_year)
         link_dict = self._get_links_matchday(season, match_day)
 
-        for link in link_dict.get("match_stats"):
-            stats_home_list, stats_away_list = self._get_match_stats(link, season, match_day)
-            self.match_data.append(stats_home_list)
-            self.match_data.append(stats_away_list)
+        # MATCH INFO
+        for link in link_dict.get("match_info"):
+            self._get_match_info(link, season, match_day)
+        print("finished getting match info")
+
+        # TEAM STATS
+        for link in link_dict.get("team_stats"):
+            self._get_teams_stats(link, season, match_day)
         print("finished getting match stats")
 
-        for link in link_dict.get("schema"):
-            self._get_schema(link, season, match_day)
-        print("finished getting player_performance and coaches")
+        # PLAYER STATS
+        for link in link_dict.get("player_stats"):
+            self._get_player_stats(link, season, match_day)
+        print("finished getting player_stats and coaches")
 
     def _get_links_matchday(self, season, match_day):
         URL = self.base_url + "/" + self.league + "/spieltag/20" + str(season) + '/' + str(match_day)
         page = requests.get(URL)
         soup = BeautifulSoup(page.content, 'html.parser')
         results = soup.findAll('a', {'class': 'kick__v100-scoreBoard kick__v100-scoreBoard--standard'})
-        link_dict = dict()
-        link_dict["match_stats"] = []
-        link_dict["schema"] = []
+        link_dict = {"team_stats":[],"player_stats":[],"match_info":[]}
         for elem in results:
             link = elem.get('href')
-            link_dict["match_stats"].append(self.base_url + link.replace("analyse", "spieldaten"))
-            link_dict["schema"].append(self.base_url + link.replace("analyse", "schema"))
+            link_dict["team_stats"].append(self.base_url + link.replace("analyse", "spieldaten"))
+            link_dict["player_stats"].append(self.base_url + link.replace("analyse", "schema"))
+            link_dict["match_info"].append(self.base_url + link.replace("analyse", "spielinfo"))
 
         return link_dict
 
-    def _get_match_stats(self, URL, season, match_day):
+    def _get_match_info(self, URL, season, match_day):
+        page = requests.get(URL)
+        soup = BeautifulSoup(page.content, 'html.parser')
+        kick_off = soup.findAll('span', {'class': 'kick__weekday_box'})
+        referee = soup.findAll('a')
+        referee = referee[0].get("href").split("/")[1]+ "/" + referee[0].get('href').split("/")[2]
+
+        match_info_dict = {"season": season, "match_day": match_day, "kick_off_time":kick_off[0].text, "referee": referee}
+
+        self.match_info.append(match_info_dict)
+
+    def _get_teams_stats(self, URL, season, match_day):
         page = requests.get(URL)
         soup = BeautifulSoup(page.content, 'html.parser')
 
         teams = soup.findAll('div', {'class': 'kick__v100-gameCell__team__name'})
+        stat_titles = soup.findAll('div', {'class': 'kick__stats-bar__title'})
         stats_home = soup.findAll('div', {'class': 'kick__stats-bar__value kick__stats-bar__value--opponent1'})
         stats_away = soup.findAll('div', {'class': 'kick__stats-bar__value kick__stats-bar__value--opponent2'})
         score = soup.findAll('div', {'class': 'kick__v100-scoreBoard__scoreHolder__score'})
+        positions = soup.findAll('div', {'class': 'kick__v100-gameCell__team__info'})
+        stats_home_dict = {"season": season, "match_day": match_day, "indicator": "home", "team_name": teams[0].text, "ht_goals":score[2].text, "position": positions[0].text}
+        stats_away_dict = {"season": season, "match_day": match_day, "indicator": "away", "team_name": teams[1].text, "ht_goals":score[3].text, "position": positions[1].text}
 
-        stats_home_list = [season, match_day, "home", teams[0].text]
-        stats_away_list = [season, match_day, "away", teams[1].text]
+        for stat_titles, stats_home, stats_away in zip(stat_titles, stats_home, stats_away):
+            column_name = self.mappings.get("team_stats").get(stat_titles.text)
+            if column_name is None: print(stat_titles.text)
+            stats_home_dict[column_name] = stats_home.text
+            stats_away_dict[column_name] = stats_away.text
 
-        for s, goal in enumerate(score):
-            stats_home_list.append(score[s].text)
-            stats_away_list.append(score[s].text)
+        self.team_stats.append(stats_home_dict)
+        self.team_stats.append(stats_away_dict)
 
-        for i in range(1, 13, 1):
-            stats_home_list.append(stats_home[i].text)
-            stats_away_list.append(stats_away[i].text)
-        return stats_home_list, stats_away_list
-
-
-    def _get_schema(self, URL, season, match_day):
+    def _get_player_stats(self, URL, season, match_day):
         page = requests.get(URL)
         soup = BeautifulSoup(page.content, 'html.parser')
 
@@ -158,29 +175,16 @@ class Scraper:
                         self.coach_data.append([season, match_day, indicator, name])
 
     def store_data(self, league_code):
-        df_match_data = pd.DataFrame(self.match_data, columns=['season',
-                                              'matchday',
-                                              'indicator',
-                                              'team_name',
-                                              'h_goals',
-                                              'a_goals',
-                                              'h_ht_goals',
-                                              'a_ht_goals',
-                                              'shots_on_goal',
-                                              'distance',
-                                              'total_passes',
-                                              'success_passes',
-                                              'failed_passes',
-                                              'pass_ratio',
-                                              'possesion',
-                                              'tackle_ratio',
-                                              'fouls',
-                                              'got_fouled',
-                                              'offside',
-                                              'corners'])
-        df_match_data["league_code"] = league_code
-        df_match_data.to_csv("./data/match_stats/"+ str(self.league) + "_" + str(self.start_season) + "_" + str(self.end_season) + ".csv", index=False)
+        df_team_stats = pd.DataFrame(self.team_stats)
+        df_team_stats["league_code"] = league_code
+        df_team_stats.to_csv("./data/team_stats/" + str(self.league) + "_" + str(self.start_season) + "_" + str(self.end_season) + ".csv", index=False)
+        print(df_team_stats)
 
+        df_match_info = pd.DataFrame(self.match_info)
+        df_match_info["league_code"] = league_code
+        df_match_info.to_csv("./data/match_info/" + str(self.league) + "_" + str(self.start_season) + "_" + str(self.end_season) + ".csv", index=False)
+        print(df_match_info)
+        
         df_player_performance = pd.DataFrame(self.schema_data, columns=['season',
                                                                 'matchday',
                                                                 'indicator',
@@ -195,7 +199,7 @@ class Scraper:
                                                                 'yellow_red_card',
                                                                 'red_card'])
         df_player_performance["league_code"] = league_code
-        df_player_performance.to_csv("./data/player_performance/" + str(self.league) + "_" + str(self.start_season) + "_" + str(
+        df_player_performance.to_csv("./data/player_stats/" + str(self.league) + "_" + str(self.start_season) + "_" + str(
             self.end_season) + ".csv", index=False)
 
         df_coaches = pd.DataFrame(self.coach_data, columns=['season',
