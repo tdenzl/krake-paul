@@ -6,13 +6,14 @@ from datetime import datetime
 import pandas as pd
 from multiprocessing import Pool
 import hashlib
+from .job_bookmark import JobBookmark
 
 from tqdm import tqdm
 
 import os
 import glob
 
-class Scraper:
+class KickerScraper:
 
     def __init__(self, league, start_season, end_season, matchdays=None):
         self.base_url = "https://www.kicker.de"
@@ -36,6 +37,12 @@ class Scraper:
         for season in tqdm(range(self.start_season, self.end_season, 1)):
             start_matchday = 1
             for matchday in tqdm(range(1, self.matchdays + 1, 1)):
+                matchdays_parsed = []
+                try:
+                    matchdays_parsed = JobBookmark.get_bookmark("kicker_scrape")[0]["data_scraped"][self.league][season].keys()
+                except KeyError: pass
+                if matchday in matchdays_parsed:
+                    continue
                 if not self._check_team_stats_available(season, matchday): continue
                 self._get_data(season, season + 1, matchday)
                 if matchday%9==0:
@@ -228,6 +235,9 @@ class Scraper:
         df = df.drop_duplicates()
         df.to_parquet("./data/bronze/"+table_name+"/" + str(self.league) + "_" + str(season) + "_" + str(season+1) + "_" + str(start_matchday) + "_" + str(end_matchday) + ".parquet", index=False)
         print("finished storing ",table_name," for season ", str(season), " matchday ", start_matchday," until ", end_matchday," of ", self.league)
+        for d in range(1,end_matchday+1,1):
+            jb_entry = {self.league:{season:{d: True}}}
+        JobBookmark.update_bookmark("kicker_scrape", jb_entry)
 
     def _reset_data_lists(self):
         self.match_info = []
