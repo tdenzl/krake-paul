@@ -39,7 +39,7 @@ class KickerScraper:
             for matchday in tqdm(range(1, self.matchdays + 1, 1)):
                 matchdays_parsed = []
 
-                try:matchdays_parsed = JobBookmark.get_data_scraped("kicker_scrape")[self.league][season].keys()
+                try:matchdays_parsed = JobBookmark.get_data_scraped("kicker_scraper")[self.league][season].keys()
                 except KeyError: pass
 
                 if matchday in matchdays_parsed:
@@ -237,12 +237,12 @@ class KickerScraper:
         df.to_parquet("./data/bronze/"+table_name+"/" + str(self.league) + "_" + str(season) + "_" + str(season+1) + "_" + str(start_matchday) + "_" + str(end_matchday) + ".parquet", index=False)
         print("finished storing ",table_name," for season ", str(season), " matchday ", start_matchday," until ", end_matchday," of ", self.league)
 
-        jb_entry = JobBookmark.get_data_scraped("kicker_scrape")
+        jb_entry = JobBookmark.get_data_scraped("kicker_scraper")
         if jb_entry.get(self.league) is None: jb_entry[self.league] = dict()
         if jb_entry.get(self.league).get(season) is None: jb_entry[self.league][season] = dict()
         for d in range(start_matchday,end_matchday+1,1):
             jb_entry[self.league][season][d] = True
-        JobBookmark.update_bookmark("kicker_scrape", jb_entry)
+        JobBookmark.update_bookmark("kicker_scraper", jb_entry)
 
     def _reset_data_lists(self):
         self.match_info = []

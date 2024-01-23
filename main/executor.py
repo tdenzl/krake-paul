@@ -12,7 +12,7 @@ class Executor:
     def _scrape_kicker_data(self, load_type="latest"):
         if load_type == "full":
             KickerScraper.delete_bronze_data()
-            JobBookmark.delete_bookmark("kicker_scrape")
+            JobBookmark.delete_bookmark("kicker_scraper")
         for league in json.load(open('./config/mapping_leagues.json', 'r')).keys():
             kicker_scraper = KickerScraper(league, 13, 24)
             kicker_scraper.scrape()
@@ -21,7 +21,7 @@ class Executor:
     def _scrape_fifa_rating_data(self, load_type="latest"):
         if load_type == "full":
             FifaScraper.delete_bronze_data()
-            JobBookmark.delete_bookmark("fifa_scrape")
+            JobBookmark.delete_bookmark("fifa_scraper")
         for year in json.load(open('./config/mapping_fifa.json', 'r')).keys():
             scraper = FifaScraper(year)
             scraper.scrape()

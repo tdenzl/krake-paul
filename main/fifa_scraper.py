@@ -26,7 +26,7 @@ class FifaScraper:
         print("fifa scraper initialized for year ", self.year)
 
     def scrape(self):
-        try: years_parsed = JobBookmark.get_data_scraped("fifa_scrape").keys()
+        try: years_parsed = JobBookmark.get_data_scraped("fifa_scraper").keys()
         except KeyError: pass
         if self.year in years_parsed: return
 
@@ -105,9 +105,9 @@ class FifaScraper:
         df.to_parquet("./data/bronze/player_ratings/players_fifa" + str(self.year) + ".parquet", index=False)
         print("finished storing player stats for season ", str(self.year))
 
-        jb_entry = JobBookmark.get_data_scraped("fifa_scrape")
+        jb_entry = JobBookmark.get_data_scraped("fifa_scraper")
         jb_entry[self.year] = True
-        JobBookmark.update_bookmark("fifa_scrape", jb_entry)
+        JobBookmark.update_bookmark("fifa_scraper", jb_entry)
 
     @classmethod
     def delete_bronze_data(self):
