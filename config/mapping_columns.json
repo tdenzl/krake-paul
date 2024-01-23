@@ -1,5 +1,5 @@
 {
-  "match_stats": {
+  "team_stats": {
     "Tore": "goals",
     "Torschüsse": "shots_on_goal",
     "Laufleistung": "distance",

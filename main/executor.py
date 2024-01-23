@@ -1,11 +1,11 @@
 from .scraper import Scraper
-
+import json
 class Executor:
 
     def execute(self):
-        league_dict = {"bundesliga":"GER1", "premier-league":"ENG1", "la-liga":"ESP1", "serie-a":"ITA1", "ligue-1":"FRA1"}
+        league_dict = json.load(open('./config/mapping_leagues.json', 'r'))
+        Scraper.delete_bronze_data()
         for league, code in league_dict.items():
-            scraper = Scraper(league, 21, 22, 1)
+            scraper = Scraper(league, 13, 24)
             scraper.scrape()
-            scraper.store_data(code)
             print("finished ", league, " scraping")

@@ -1,0 +1,17 @@
+{
+  "bundesliga": {"code": "GER1", "matchdays": 34},
+  "2-bundesliga": {"code": "GER2", "matchdays": 34},
+  "premier-league": {"code": "ENG1", "matchdays": 38},
+  "la-liga": {"code": "ESP1", "matchdays": 38},
+  "serie-a": {"code": "ITA1", "matchdays": 38},
+  "ligue-1": {"code": "FRA1", "matchdays": 34},
+  "bundesliga-oesterreich": {"code": "AUT1", "matchdays": 22},
+  "super-league-schweiz": {"code": "SUI1", "matchdays": 36},
+  "eredivisie": {"code": "NED1", "matchdays": 34},
+  "sueper-lig": {"code": "TUR1", "matchdays": 38},
+  "primeira-liga": {"code": "POR1", "matchdays": 34},
+  "mls": {"code": "USA1", "matchdays": 38},
+  "j-league": {"code": "JAP1", "matchdays": 38},
+  "campeonato-brasileiro-serie-a": {"code": "BRA1", "matchdays": 38},
+  "super-league-griechenland":{"code": "GRE1", "matchdays": 26}
+  }
