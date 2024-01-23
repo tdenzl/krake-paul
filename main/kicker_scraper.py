@@ -7,7 +7,7 @@ import pandas as pd
 from multiprocessing import Pool
 import hashlib
 from .job_bookmark import JobBookmark
-
+from copy import deepcopy
 from tqdm import tqdm
 
 import os
@@ -38,15 +38,14 @@ class KickerScraper:
             start_matchday = 1
             for matchday in tqdm(range(1, self.matchdays + 1, 1)):
                 matchdays_parsed = []
-
-                try:matchdays_parsed = JobBookmark.get_data_scraped("kicker_scraper")[self.league][season].keys()
+                try: matchdays_parsed = JobBookmark.get_data_scraped("kicker_scraper")[self.league][season]
                 except KeyError: pass
 
                 if matchday in matchdays_parsed:
                     continue
                 if not self._check_team_stats_available(season, matchday): continue
                 self._get_data(season, season + 1, matchday)
-                if matchday%9==0:
+                if matchday%2==0:
                     self._save(season, start_matchday, matchday)
                     start_matchday = matchday
             self._save(season, start_matchday, matchday)
@@ -237,11 +236,11 @@ class KickerScraper:
         df.to_parquet("./data/bronze/"+table_name+"/" + str(self.league) + "_" + str(season) + "_" + str(season+1) + "_" + str(start_matchday) + "_" + str(end_matchday) + ".parquet", index=False)
         print("finished storing ",table_name," for season ", str(season), " matchday ", start_matchday," until ", end_matchday," of ", self.league)
 
-        jb_entry = JobBookmark.get_data_scraped("kicker_scraper")
+        jb_entry = deepcopy(JobBookmark.get_data_scraped("kicker_scraper"))
         if jb_entry.get(self.league) is None: jb_entry[self.league] = dict()
-        if jb_entry.get(self.league).get(season) is None: jb_entry[self.league][season] = dict()
-        for d in range(start_matchday,end_matchday+1,1):
-            jb_entry[self.league][season][d] = True
+        if jb_entry.get(self.league).get(season) is None: jb_entry[self.league][season] = []
+        for d in range(start_matchday,end_matchday,1):
+            jb_entry[self.league][season].append(d)
         JobBookmark.update_bookmark("kicker_scraper", jb_entry)
 
     def _reset_data_lists(self):

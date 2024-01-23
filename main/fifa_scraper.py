@@ -7,7 +7,7 @@ import pandas as pd
 from multiprocessing import Pool
 import hashlib
 from .job_bookmark import JobBookmark
-
+from copy import deepcopy
 from tqdm import tqdm
 
 import os
@@ -49,10 +49,13 @@ class FifaScraper:
             self.profile_links.add(player.get("href"))
 
     def _get_player_stats(self, player_url):
-        player_page = requests.get("https://fifaindex.com" + player_url + "fifa" + str(self.year))
+        if "fifa" + str(self.year) not in player_url: player_url = player_url + "fifa" + str(self.year)
+        player_page = requests.get("https://fifaindex.com" + player_url)
         soup = BeautifulSoup(player_page.content, 'html.parser')
         player_id = player_url.split("/")[2]
-        player_dict = {"fifa": self.year,"player_id":player_id, "preferred_position_1":None, "preferred_position_2":None, "preferred_position_3":None}
+        player_dict = {"fifa": self.year,"player_id":player_id, "preferred_position_1":None, "preferred_position_2":None, "preferred_position_3":None,"preferred_position_4":None, "team_link": None,"team_name":None, "national_team_link": None, "national_team_name":None}
+        for column in self.fifa_ratings_columns.values():
+            player_dict[column] = None
 
         pclasses = soup.findAll('p', {'class': ''})
         preferred_positions = set()
@@ -77,11 +80,13 @@ class FifaScraper:
 
         team_info = soup.findAll('a', {'class': 'link-team'})
 
-        player_dict["team_link"] = team_info[1].get("href")
-        player_dict["team_name"] = team_info[1].text
-        if len(team_info) == 4:
-            player_dict["national_team_link"] = team_info[3].get("href")
-            player_dict["national_team_name"] = team_info[3].text
+        for n, tinfo in enumerate(team_info):
+            if n==1:
+                player_dict["team_link"] = tinfo.get("href")
+                player_dict["team_name"] = tinfo.text
+            if n==3:
+                player_dict["national_team_link"] = tinfo.get("href")
+                player_dict["national_team_name"] = tinfo.text
 
         nationality_info = soup.findAll('h2', {'class': 'd-flex align-items-center'})
         for ninfo in nationality_info:
@@ -95,7 +100,8 @@ class FifaScraper:
                 for suffix in n.findAll('span'):
                     name = name.replace(" "+suffix.text, "")
                 player_dict["name"] = name
-
+        print(len(player_dict))
+        print(player_dict)
         self.player_ratings.append(player_dict)
 
 
@@ -105,7 +111,7 @@ class FifaScraper:
         df.to_parquet("./data/bronze/player_ratings/players_fifa" + str(self.year) + ".parquet", index=False)
         print("finished storing player stats for season ", str(self.year))
 
-        jb_entry = JobBookmark.get_data_scraped("fifa_scraper")
+        jb_entry = deepcopy(JobBookmark.get_data_scraped("fifa_scraper"))
         jb_entry[self.year] = True
         JobBookmark.update_bookmark("fifa_scraper", jb_entry)
 

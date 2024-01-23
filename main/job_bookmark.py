@@ -1,3 +1,4 @@
+import copy
 from datetime import date, timedelta, datetime
 import json
 import os
@@ -20,9 +21,10 @@ class JobBookmark():
     @classmethod
     def update_bookmark(self, job_name, dict):
         job_bookmark, bookmark_path = self.get_bookmark(job_name)
-        job_bookmark["data_scraped"] = dict
-        job_bookmark['latest_update'] = str(datetime.now())
-        self._write_bookmark(job_bookmark, bookmark_path)
+        new_bookmark = copy.deepcopy(job_bookmark)
+        new_bookmark["data_scraped"] = dict
+        new_bookmark['latest_update'] = str(datetime.now())
+        self._write_bookmark(new_bookmark, bookmark_path)
 
     @classmethod
     def get_bookmark(self, job_name):
@@ -40,7 +42,8 @@ class JobBookmark():
 
     @classmethod
     def delete_bookmark(self, job_name):
-        os.remove("./job_bookmark/" + job_name + '.json')
+        bookmark_path = "./job_bookmark/" + job_name + '.json'
+        if exists(bookmark_path): os.remove(bookmark_path)
 
     @classmethod
     def get_latest_update(self, job_name):

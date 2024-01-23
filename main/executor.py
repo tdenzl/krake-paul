@@ -6,8 +6,8 @@ import json
 class Executor:
 
     def execute(self):
-        #self._scrape_kicker_data()
-        self._scrape_fifa_rating_data()
+        self._scrape_kicker_data("full")
+        #self._scrape_fifa_rating_data("full")
 
     def _scrape_kicker_data(self, load_type="latest"):
         if load_type == "full":
