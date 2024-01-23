@@ -20,8 +20,7 @@ class JobBookmark():
     @classmethod
     def update_bookmark(self, job_name, dict):
         job_bookmark, bookmark_path = self.get_bookmark(job_name)
-        for key,value in dict.items():
-            job_bookmark["data_scraped"][key] = value
+        job_bookmark["data_scraped"] = dict
         job_bookmark['latest_update'] = str(datetime.now())
         self._write_bookmark(job_bookmark, bookmark_path)
 
@@ -46,3 +45,7 @@ class JobBookmark():
     @classmethod
     def get_latest_update(self, job_name):
         return self.get_bookmark(job_name).get("latest_update")
+
+    @classmethod
+    def get_data_scraped(self, job_name):
+        return self.get_bookmark(job_name)[0].get("data_scraped")

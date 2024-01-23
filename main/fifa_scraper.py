@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 from multiprocessing import Pool
 import hashlib
+from .job_bookmark import JobBookmark
 
 from tqdm import tqdm
 
@@ -21,21 +22,23 @@ class FifaScraper:
         self.base_url = "https://fifaindex.com/players/fifa" + str(year)
         self.profile_links = set()
         # data dicts
-        self.player_data = []
+        self.player_ratings = []
         print("fifa scraper initialized for year ", self.year)
 
     def scrape(self):
+        try: years_parsed = JobBookmark.get_data_scraped("fifa_scrape").keys()
+        except KeyError: pass
+        if self.year in years_parsed: return
+
         #create page index
         for p in tqdm(range(1, self.last_page + 1, 1)):
             page_url = self.base_url + "/?page=" + str(p)
             self._get_initial_profile_links(page_url)
-            break
 
         for profile_link in tqdm(self.profile_links):
             self._get_player_stats(profile_link)
-            break
 
-        print(self.player_data)
+        self._store_data()
 
     def _get_initial_profile_links(self, page_url):
         page = requests.get(page_url)
@@ -51,13 +54,12 @@ class FifaScraper:
         player_id = player_url.split("/")[2]
         player_dict = {"fifa": self.year,"player_id":player_id, "preferred_position_1":None, "preferred_position_2":None, "preferred_position_3":None}
 
-        #mb_5s = soup.findAll('div', {'class': 'card mb-5'})
         pclasses = soup.findAll('p', {'class': ''})
         preferred_positions = set()
 
         for pclass in pclasses:
             for v in pclass.findAll('span', {'class': 'float-right'}):
-                attribute = self.fifa_ratings_columns.get(pclass.text.replace(" "+v.text, ""))
+                attribute = self.fifa_ratings_columns.get(pclass.text.replace(v.text, "").strip())
                 if attribute is not None:
                     value = v.text
                     for metric_value in v.findAll('span', {'class': 'data-units data-units-metric'}):
@@ -65,36 +67,47 @@ class FifaScraper:
                     for position in v.findAll('a', {'class': 'link-position'}):
                         value = position.text
                         if attribute == "preferred_position_1": preferred_positions.add(value)
+                    for stars in v.findAll('i', {'class': 'fas fa-star fa-lg'}):
+                        value = len(v.findAll('i', {'class': 'fas fa-star fa-lg'}))
                     player_dict[attribute] = value
-
 
         for v, value in enumerate(preferred_positions):
             player_dict["preferred_position_"+str(v+1)] = value
             if v>=3: break
 
+        team_info = soup.findAll('a', {'class': 'link-team'})
 
-        """
-        for mb_5 in mb_5s:
-            if "Height" in mb_5:
-                print(mb_5)
+        player_dict["team_link"] = team_info[1].get("href")
+        player_dict["team_name"] = team_info[1].text
+        if len(team_info) == 4:
+            player_dict["national_team_link"] = team_info[3].get("href")
+            player_dict["national_team_name"] = team_info[3].text
 
-        team_info = mb_5s[2]
-        #print(mb_5s[2])
-        player_dict["team_link"] = team_info.findAll('a', {'class': 'link-team'})[1].get("href")
-        player_dict["team_name"] = team_info.findAll('a', {'class': 'link-team'})[1].text
+        nationality_info = soup.findAll('h2', {'class': 'd-flex align-items-center'})
+        for ninfo in nationality_info:
+            for n in ninfo.findAll('a'):
+                player_dict["nationality_id"] = n.get("href")
+            player_dict["nationality"] = ninfo.text
 
-        #print(mb_5s[3])
-        """
+        for name_info in soup.findAll('div', {'class': 'align-self-center pl-3'}):
+            for n in name_info.findAll('h1'):
+                name = n.text
+                for suffix in n.findAll('span'):
+                    name = name.replace(" "+suffix.text, "")
+                player_dict["name"] = name
 
-        self.player_data.append(player_dict)
+        self.player_ratings.append(player_dict)
 
 
     def _store_data(self):
-        df = pd.DataFrame(self.player_data)
+        df = pd.DataFrame(self.player_ratings)
         df = df.drop_duplicates()
-        df.to_parquet("./data/bronze/player_ratings/" + str(self.year) + ".parquet", index=False)
+        df.to_parquet("./data/bronze/player_ratings/players_fifa" + str(self.year) + ".parquet", index=False)
         print("finished storing player stats for season ", str(self.year))
 
+        jb_entry = JobBookmark.get_data_scraped("fifa_scrape")
+        jb_entry[self.year] = True
+        JobBookmark.update_bookmark("fifa_scrape", jb_entry)
 
     @classmethod
     def delete_bronze_data(self):
