@@ -35,40 +35,37 @@ class KickerScraper:
 
     def scrape(self):
         for season in tqdm(range(self.start_season, self.end_season, 1)):
+            if not self._check_team_stats_available(season): continue
             start_matchday = 1
             for matchday in tqdm(range(1, self.matchdays + 1, 1)):
-                matchdays_parsed = []
-                try: matchdays_parsed = JobBookmark.get_data_scraped("kicker_scraper")[self.league][season]
-                except KeyError: pass
-
-                if matchday in matchdays_parsed:
-                    continue
-                if not self._check_team_stats_available(season, matchday): continue
+                if JobBookmark.get_data_scraped("kicker_scraper").get(self.league+"_"+str(season)+"_"+str(matchday)): continue
                 self._get_data(season, season + 1, matchday)
-                if matchday%2==0:
+                if matchday%9==0:
                     self._save(season, start_matchday, matchday)
-                    start_matchday = matchday
+                    start_matchday = matchday+1
             self._save(season, start_matchday, matchday)
 
     def _get_current_season_matchday(self):
         #@TODO: method that returns the current season and matchday to avoid parsing the last day over and over again
         return
 
-    def _check_team_stats_available(self, season, matchday):
-        #check for first match of matchday if it has team stats
-        URL = self.base_url + "/" + self.league + "/spieltag/20" + str(season) + '/' + str(matchday)
+    def _check_team_stats_available(self, season):
+        #check for first match of season if it has team stats
+        URL = self.base_url + "/" + self.league + "/spieltag/20" + str(season) + "-" + str(season+1) + '/1'
         page = requests.get(URL)
         soup = BeautifulSoup(page.content, 'html.parser')
         results = soup.findAll('a', {'class': 'kick__v100-scoreBoard kick__v100-scoreBoard--standard'})
-        first_stats_link = self.base_url + results[0].get('href').replace("analyse", "spieldaten").replace("spielbericht", "spieldaten")
-
+        first_stats_link = self.base_url + results[0].get('href').replace("analyse", "spielinfo").replace("spielbericht", "spielinfo").replace("schema", "spielinfo")
         page = requests.get(first_stats_link)
         soup = BeautifulSoup(page.content, 'html.parser')
-        stat_titles = soup.findAll('div', {'class': 'kick__stats-bar__title'})
+        stat_titles = soup.findAll('a', {'class': 'kick__nav-tabs__link'})
         if stat_titles is None or len(stat_titles)==0:
-            print("data not yet available for season ", season, " matchday ", matchday)
+            print("data not yet available for season ", season)
             return False
-        return True
+        for stat_title in stat_titles:
+            if "Spieldaten" in stat_title.text: return True
+        print("data not yet available for season ", season)
+        return False
 
     def _get_data(self, start_year, end_year, match_day):
         season = str(start_year) + '-' + str(end_year)
@@ -91,9 +88,9 @@ class KickerScraper:
             game_id_string = (str(self.league)+str(season)+str(match_day)+str(link)).encode('utf-8')
             game_id = str(hashlib.md5(game_id_string).hexdigest())
             link_dict[game_id] = dict()
-            link_dict[game_id]["team_stats"] = self.base_url + link.replace("analyse", "spieldaten").replace("spielbericht", "spieldaten")
+            link_dict[game_id]["team_stats"] = self.base_url + link.replace("analyse", "spieldaten").replace("spielbericht", "spieldaten").replace("schema", "spieldaten")
             link_dict[game_id]["player_stats"] = self.base_url + link.replace("analyse", "schema").replace("spielbericht", "schema")
-            link_dict[game_id]["match_info"] = self.base_url + link.replace("analyse", "spielinfo").replace("spielbericht", "spielinfo")
+            link_dict[game_id]["match_info"] = self.base_url + link.replace("analyse", "spielinfo").replace("spielbericht", "spielinfo").replace("schema", "spielinfo")
 
         return link_dict
 
@@ -121,15 +118,17 @@ class KickerScraper:
     def _get_team_stats(self, URL, season, match_day, game_id):
         page = requests.get(URL)
         soup = BeautifulSoup(page.content, 'html.parser')
-
         teams = soup.findAll('div', {'class': 'kick__v100-gameCell__team__name'})
         stat_titles = soup.findAll('div', {'class': 'kick__stats-bar__title'})
         stats_home = soup.findAll('div', {'class': 'kick__stats-bar__value kick__stats-bar__value--opponent1'})
         stats_away = soup.findAll('div', {'class': 'kick__stats-bar__value kick__stats-bar__value--opponent2'})
         score = soup.findAll('div', {'class': 'kick__v100-scoreBoard__scoreHolder__score'})
         positions = soup.findAll('div', {'class': 'kick__v100-gameCell__team__info'})
-        stats_home_dict = {"game_id": game_id, "season": season, "match_day": match_day, "indicator": "home", "team_name": teams[0].text, "ht_goals":score[2].text, "position": positions[0].text}
-        stats_away_dict = {"game_id": game_id, "season": season, "match_day": match_day, "indicator": "away", "team_name": teams[1].text, "ht_goals":score[3].text, "position": positions[1].text}
+        if len(score) <= 2: h_ht_goals = None; a_ht_goals = None
+        else: h_ht_goals = score[2].text; a_ht_goals = score[3].text
+
+        stats_home_dict = {"game_id": game_id, "season": season, "match_day": match_day, "indicator": "home", "team_name": teams[0].text, "ht_goals":h_ht_goals, "position": positions[0].text}
+        stats_away_dict = {"game_id": game_id, "season": season, "match_day": match_day, "indicator": "away", "team_name": teams[1].text, "ht_goals":a_ht_goals, "position": positions[1].text}
 
         for stat_titles, stats_home, stats_away in zip(stat_titles, stats_home, stats_away):
             column_name = self.mapping_columns.get("team_stats").get(stat_titles.text)
@@ -192,7 +191,7 @@ class KickerScraper:
             yellow_red_card = 0
             red_card = 0
             for pl in event.findAll('a', {'class': 'kick__substitutions__player'}):
-                player_link = pl.get('href').split("/")[1] + "/" + player.get('href').split("/")[2]
+                player_link = pl.get('href').split("/")[1] + "/" + pl.get('href').split("/")[2]
             for ct in event.findAll('div', {'class': 'kick__substitutions__time'}):
                 card_time = ct.text
             for cd in event.findAll('span', {'class': 'kick__substitutions__player-subtxt'}):
@@ -223,10 +222,17 @@ class KickerScraper:
                         self.coach_data.append({"game_id": game_id, "season": season, "matchday":matchday, "indicator": indicator, "coach_name": name})
 
     def _save(self, season, start_matchday, end_matchday):
+        if len(self.match_info)==0: print("data was empty, not storing"); return
         self._store_data(self.match_info, "match_info", season, start_matchday, end_matchday)
         self._store_data(self.team_stats, "team_stats", season, start_matchday, end_matchday)
         self._store_data(self.player_stats, "player_stats", season, start_matchday, end_matchday)
         self._store_data(self.coach_data, "coaches", season, start_matchday, end_matchday)
+        #print("finished storing data for season ", str(season), " matchday ", start_matchday, " until ",end_matchday, " of ", self.league)
+
+        for d in range(start_matchday, end_matchday+1, 1):
+            key = self.league+"_"+str(season)+"_"+str(d)
+            JobBookmark.update_bookmark("kicker_scraper", key, True)
+
         self._reset_data_lists()
 
     def _store_data(self, data_list, table_name, season, start_matchday, end_matchday):
@@ -234,14 +240,7 @@ class KickerScraper:
         df["league_code"] = self.mapping_leagues.get(self.league).get("code")
         df = df.drop_duplicates()
         df.to_parquet("./data/bronze/"+table_name+"/" + str(self.league) + "_" + str(season) + "_" + str(season+1) + "_" + str(start_matchday) + "_" + str(end_matchday) + ".parquet", index=False)
-        print("finished storing ",table_name," for season ", str(season), " matchday ", start_matchday," until ", end_matchday," of ", self.league)
 
-        jb_entry = deepcopy(JobBookmark.get_data_scraped("kicker_scraper"))
-        if jb_entry.get(self.league) is None: jb_entry[self.league] = dict()
-        if jb_entry.get(self.league).get(season) is None: jb_entry[self.league][season] = []
-        for d in range(start_matchday,end_matchday,1):
-            jb_entry[self.league][season].append(d)
-        JobBookmark.update_bookmark("kicker_scraper", jb_entry)
 
     def _reset_data_lists(self):
         self.match_info = []

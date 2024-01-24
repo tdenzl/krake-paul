@@ -100,8 +100,6 @@ class FifaScraper:
                 for suffix in n.findAll('span'):
                     name = name.replace(" "+suffix.text, "")
                 player_dict["name"] = name
-        print(len(player_dict))
-        print(player_dict)
         self.player_ratings.append(player_dict)
 
 

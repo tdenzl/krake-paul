@@ -19,12 +19,11 @@ class JobBookmark():
         return bookmark
 
     @classmethod
-    def update_bookmark(self, job_name, dict):
+    def update_bookmark(self, job_name, key, value):
         job_bookmark, bookmark_path = self.get_bookmark(job_name)
-        new_bookmark = copy.deepcopy(job_bookmark)
-        new_bookmark["data_scraped"] = dict
-        new_bookmark['latest_update'] = str(datetime.now())
-        self._write_bookmark(new_bookmark, bookmark_path)
+        job_bookmark["data_scraped"][key]=value
+        job_bookmark['latest_update'] = str(datetime.now())
+        self._write_bookmark(job_bookmark, bookmark_path)
 
     @classmethod
     def get_bookmark(self, job_name):
