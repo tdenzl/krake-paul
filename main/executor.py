@@ -1,6 +1,8 @@
 from .kicker_scraper import KickerScraper
 from .fifa_scraper import FifaScraper
 from .job_bookmark import JobBookmark
+from .preprocessor import Preprocessor
+
 from multiprocessing import Pool
 import time
 import os
@@ -8,9 +10,10 @@ import json
 class Executor:
 
     def execute(self):
-        #self._scrape_kicker_data()
-        self._scrape_kicker_data_multiprocessing()
-        #self._scrape_fifa_rating_data()
+        #self._scrape_kicker_data_multiprocessing()
+        self._scrape_fifa_rating_data()
+       # self._preprocess()
+
 
     def _scrape_kicker_data(self, load_type="latest"):
         if load_type == "full":
@@ -46,8 +49,13 @@ class Executor:
             pool = Pool(os.cpu_count() - 1)  # Create a multiprocessing Pool os.cpu_count()//2
             pool.map(self._execute_kicker_scraping_sub_job, job_list)  # process data_inputs iterable with pool
 
-
     def _execute_kicker_scraping_sub_job(self, job_entry):
         kicker_scraper = KickerScraper(job_entry.get("league"), job_entry.get("start_season"), job_entry.get("end_season"))
         kicker_scraper.scrape()
         print("finished ", job_entry.get("league"), " scraping")
+
+    def _preprocess(self):
+        #Preprocessor.preprocess_table("coaches")
+        #Preprocessor.preprocess_table("match_info")
+        #Preprocessor.preprocess_table("team_stats")
+        Preprocessor.preprocess_table("player_stats")

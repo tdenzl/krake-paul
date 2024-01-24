@@ -179,7 +179,7 @@ class KickerScraper:
         for p, player in enumerate(substitution_players):
             player_link = player.get('href').split("/")[1] + "/" + player.get('href').split("/")[2]
             if p % 2 == 0:
-                substitution_dict["in"][player_link] = substitution_times[p].text
+                substitution_dict["in"][player_link] = substitution_times[p].text # @TODO:broken
             if p % 2 == 1:
                 substitution_dict["out"][player_link] = substitution_times[p-1].text
 

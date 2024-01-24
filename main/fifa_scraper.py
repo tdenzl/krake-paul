@@ -35,10 +35,15 @@ class FifaScraper:
             page_url = self.base_url + "/?page=" + str(p)
             self._get_initial_profile_links(page_url)
 
-        for profile_link in tqdm(self.profile_links):
+        for p, profile_link in tqdm(enumerate(self.profile_links)):
             self._get_player_stats(profile_link)
+            if p+1 % 4000 == 0:
+                self._store_data(p+1)
+                self.player_ratings = []
+        self._store_data(p+1)
+        self.player_ratings = []
 
-        self._store_data()
+
 
     def _get_initial_profile_links(self, page_url):
         page = requests.get(page_url)
@@ -103,14 +108,14 @@ class FifaScraper:
         self.player_ratings.append(player_dict)
 
 
-    def _store_data(self):
+    def _store_data(self, p):
         df = pd.DataFrame(self.player_ratings)
         df = df.drop_duplicates()
-        df.to_parquet("./data/bronze/player_ratings/players_fifa" + str(self.year) + ".parquet", index=False)
-        print("finished storing player stats for season ", str(self.year))
+        df.to_parquet("./data/bronze/player_ratings/players_fifa" + str(self.year) + "_" + str(p) + ".parquet", index=False)
+        print("finished storing player stats for season ", str(self.year), " p = ", p)
 
         jb_entry = deepcopy(JobBookmark.get_data_scraped("fifa_scraper"))
-        jb_entry[self.year] = True
+        jb_entry[self.year+"_"+p] = True
         JobBookmark.update_bookmark("fifa_scraper", jb_entry)
 
     @classmethod
