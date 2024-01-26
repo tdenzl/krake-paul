@@ -2,6 +2,7 @@ from .kicker_scraper import KickerScraper
 from .fifa_scraper import FifaScraper
 from .job_bookmark import JobBookmark
 from .preprocessor import Preprocessor
+from .elo_calculator import EloCalculator
 
 from multiprocessing import Pool
 import time
@@ -11,8 +12,9 @@ class Executor:
 
     def execute(self):
         #self._scrape_kicker_data_multiprocessing()
-        self._scrape_fifa_rating_data()
-       # self._preprocess()
+        #self._scrape_fifa_rating_data()
+        #self._preprocess()
+        self._calculate_elos()
 
 
     def _scrape_kicker_data(self, load_type="latest"):
@@ -55,7 +57,13 @@ class Executor:
         print("finished ", job_entry.get("league"), " scraping")
 
     def _preprocess(self):
+        print("starting preprocessing")
         #Preprocessor.preprocess_table("coaches")
         #Preprocessor.preprocess_table("match_info")
         #Preprocessor.preprocess_table("team_stats")
-        Preprocessor.preprocess_table("player_stats")
+        #Preprocessor.preprocess_table("player_stats")
+        #Preprocessor.preprocess_table("player_ratings")
+
+    def _calculate_elos(self):
+        result = EloCalculator.calculcate_new_elos(630,500,3,1)
+        print(result[0],result[1])

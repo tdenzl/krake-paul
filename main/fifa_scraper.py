@@ -26,21 +26,19 @@ class FifaScraper:
         print("fifa scraper initialized for year ", self.year)
 
     def scrape(self):
-        try: years_parsed = JobBookmark.get_data_scraped("fifa_scraper").keys()
-        except KeyError: pass
-        if self.year in years_parsed: return
+        if JobBookmark.get_data_scraped("fifa_scraper").get(self.year): return
 
         #create page index
         for p in tqdm(range(1, self.last_page + 1, 1)):
             page_url = self.base_url + "/?page=" + str(p)
             self._get_initial_profile_links(page_url)
 
-        for p, profile_link in tqdm(enumerate(self.profile_links)):
+        last_index = JobBookmark.get_data_scraped("fifa_scraper").get(self.year)
+
+        for profile_link in tqdm(self.profile_links):
+            if last_index is not None and p+1<last_index: continue
             self._get_player_stats(profile_link)
-            if p+1 % 4000 == 0:
-                self._store_data(p+1)
-                self.player_ratings = []
-        self._store_data(p+1)
+        self._store_data()
         self.player_ratings = []
 
 
@@ -108,15 +106,13 @@ class FifaScraper:
         self.player_ratings.append(player_dict)
 
 
-    def _store_data(self, p):
+    def _store_data(self):
         df = pd.DataFrame(self.player_ratings)
         df = df.drop_duplicates()
-        df.to_parquet("./data/bronze/player_ratings/players_fifa" + str(self.year) + "_" + str(p) + ".parquet", index=False)
-        print("finished storing player stats for season ", str(self.year), " p = ", p)
+        df.to_parquet("./data/bronze/player_ratings/players_fifa" + str(self.year) + ".parquet", index=False)
+        print("finished storing player stats for season ", str(self.year))
 
-        jb_entry = deepcopy(JobBookmark.get_data_scraped("fifa_scraper"))
-        jb_entry[self.year+"_"+p] = True
-        JobBookmark.update_bookmark("fifa_scraper", jb_entry)
+        JobBookmark.update_bookmark("fifa_scraper", self.year, True)
 
     @classmethod
     def delete_bronze_data(self):
