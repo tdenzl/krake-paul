@@ -11,10 +11,12 @@ import json
 class Executor:
 
     def execute(self):
+        self.start_year = 13
+        self.end_year = 24
         #self._scrape_kicker_data_multiprocessing()
         #self._scrape_fifa_rating_data()
-        #self._preprocess()
-        self._calculate_elos()
+        self._preprocess()
+        #self._calculate_elos()
 
 
     def _scrape_kicker_data(self, load_type="latest"):
@@ -22,7 +24,7 @@ class Executor:
             KickerScraper.delete_bronze_data()
             JobBookmark.delete_bookmark("kicker_scraper")
         for league in json.load(open('./config/mapping_leagues.json', 'r')).keys():
-            kicker_scraper = KickerScraper(league, 13, 24)
+            kicker_scraper = KickerScraper(league, self.start_year, self.end_year)
             kicker_scraper.scrape()
             print("finished ", league, " scraping")
 
@@ -60,7 +62,7 @@ class Executor:
         print("starting preprocessing")
         #Preprocessor.preprocess_table("coaches")
         #Preprocessor.preprocess_table("match_info")
-        #Preprocessor.preprocess_table("team_stats")
+        Preprocessor.preprocess_table("team_stats")
         #Preprocessor.preprocess_table("player_stats")
         #Preprocessor.preprocess_table("player_ratings")
 

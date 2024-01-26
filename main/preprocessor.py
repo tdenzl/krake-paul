@@ -10,6 +10,7 @@ import hashlib
 from .job_bookmark import JobBookmark
 from copy import deepcopy
 from tqdm import tqdm
+from .elo_calculator import EloCalculator
 
 import os
 import glob
@@ -54,6 +55,8 @@ class Preprocessor:
 
         dtype_dict = {'matchday': 'Int32'}
         df_coaches = df_coaches.astype(dtype_dict)
+        df_coaches["season_start"] = df_coaches["season"].str.split(pat="-").str[0].str.strip()
+
         cls._write_parquet(df_coaches, './data/silver/coaches/coaches.parquet')
 
     @classmethod
@@ -63,6 +66,7 @@ class Preprocessor:
         df_match_info["kick_off_date"] = pd.to_datetime(df_match_info["kick_off_time"],format='%d-%m-%Y %H:%M', errors='coerce')
         df_match_info["kick_off_time"] = df_match_info["kick_off_date"].dt.strftime('%H:%M')
         df_match_info["referee"] = df_match_info["referee"].str.split(pat="/").str[0].str.strip()
+        df_match_info["season_start"] = df_match_info["season"].str.split(pat="-").str[0].str.strip()
 
         cls._write_parquet(df_match_info, './data/silver/match_info/match_info.parquet')
 
@@ -87,6 +91,11 @@ class Preprocessor:
         for column in float_columns:
             df_team_stats[column] = np.floor(pd.to_numeric(df_team_stats[column], errors='coerce')).astype('float')
 
+        df_team_stats["season_start"] = df_team_stats["season"].str.split(pat="-").str[0].str.strip()
+
+        df_elo = cls._calculate_elos(df_team_stats)
+
+        cls._write_parquet(df_elo, './data/silver/team_elo/team_elo.parquet')
         cls._write_parquet(df_team_stats, './data/silver/team_stats/team_stats.parquet')
 
     @classmethod
@@ -102,6 +111,7 @@ class Preprocessor:
         for column in minute_indicator_columns:
             df_player_stats[column] = df_player_stats[column].str.split(pat="'").str[0].str.strip().astype('float')/90
         df_player_stats["player_name"] = df_player_stats["player_name"].str.split(pat="/").str[0].str.strip()
+        df_player_stats["season_start"] = df_player_stats["season"].str.split(pat="-").str[0].str.strip()
 
         int_columns = ['goals', 'matchday', 'red_card','yellow_card', 'yellow_red_card', 'cum_yellow_cards']
         for column in int_columns:
@@ -170,3 +180,49 @@ class Preprocessor:
 
         df_player_ratings = df_player_ratings.drop(columns = ["preferred_position_1","preferred_position_2","preferred_position_3","preferred_position_4"])
         cls._write_parquet(df_player_ratings, './data/silver/player_ratings/player_ratings.parquet')
+
+    @classmethod
+    def _calculate_elos(cls, df_team_stats):
+        goal_data = df_team_stats.groupby(["season_start", "match_day","game_id","indicator","team_name"])['goals'].sum().reset_index()
+        goal_data_home = goal_data.loc[goal_data['indicator'] == "home"].rename(columns={"team_name":"home_team_name","goals":"home_goals"}).drop(columns=["indicator"])
+        goal_data_away = goal_data.loc[goal_data['indicator'] == "away"].rename(columns={"team_name": "away_team_name", "goals": "away_goals"}).drop(columns=["indicator"])
+        goal_data = goal_data_home.merge(goal_data_away, on=["season_start", "match_day","game_id"], how="inner").sort_values(by=["season_start","match_day"], ascending=True)
+
+        elo_dict = {}
+        df_elo = []
+        for idx, row in goal_data.iterrows():
+            game_id = row["game_id"]
+            year = int(row["season_start"])
+            matchday = int(row["match_day"])
+            home_team = row["home_team_name"]
+            away_team = row["away_team_name"]
+            home_goals = row["home_goals"]
+            away_goals = row["away_goals"]
+            if elo_dict.get(year) is None: elo_dict[year] = dict()
+            if elo_dict.get(year).get(matchday) is None: elo_dict[year][matchday] = dict()
+
+            old_home_elo = cls._get_latest_elo(elo_dict, year, matchday, home_team)
+            old_away_elo = cls._get_latest_elo(elo_dict, year, matchday, away_team)
+            new_home_elo, new_away_elo = EloCalculator.calculcate_new_elos(old_home_elo, old_away_elo, home_goals, away_goals)
+            elo_dict[year][matchday][home_team] = new_home_elo
+            elo_dict[year][matchday][away_team] = new_away_elo
+            df_elo.append({"game_id":game_id,"season_start":year,"matchday":matchday,"home_team":home_team,"home_elo":old_home_elo,"new_home_elo":new_home_elo,"home_goals":home_goals,"away_goals":away_goals,"away_elo":old_away_elo,"new_away_elo":new_away_elo,"away_team":away_team})
+
+        return pd.DataFrame(df_elo)
+
+    @classmethod
+    def _get_latest_elo(cls, elo_dict, year, matchday, team_name):
+        # find last matchday
+        previous_elo = 1300
+        try:
+            previous_elo = elo_dict[year][matchday - 1][team_name]
+        except KeyError:
+            # previous matchday not found try last season last matchday
+            for y in range(int(year), 12, -1):
+                for m in range(int(matchday), 0, -1):
+                    try:
+                        return elo_dict[y][m][team_name]
+                    except KeyError:
+                        continue
+                matchday = 50
+        return previous_elo

@@ -22,35 +22,24 @@ class EloCalculator:
 
     @classmethod
     def calculcate_new_elos(cls, h_team_elo, a_team_elo, h_goals, a_goals, k=20):
-        #calculate g
+        # goal diff
         d_diff = abs(h_goals-a_goals)
         if d_diff <= 1: g = 1
         elif d_diff == 2: g = 1.5
         else: g = (11 + abs(h_goals-a_goals))/8
-        print("g=",g)
 
-        w_home = 0.5
-        w_away = 0.5
         #outcome
         w = 0.5
         if h_goals > a_goals:
-            w_home = 1; w_away = 0
+            w = 1
         if h_goals < a_goals:
-            w_home = 0; w_away = 1
+            w = 0
 
         #expected outcome
-        w_e_home = 1/(10 ** (-(h_team_elo - a_team_elo)/400) + 1)
-        w_e_away = 1 / (10 ** (-(a_team_elo - h_team_elo) / 400) + 1)
-        print("w_e_home=", w_e_home)
-        print("w_e_away=", w_e_away)
+        w_e = 1/(10 ** (-(h_team_elo-a_team_elo)/400) + 1)
 
         #elo change
-        p_home = k * g * (w-w_e_home)
-        p_away = k * g * (w-w_e_away)
-        print("p_home=", p_home)
-        print("p_away=", p_away)
-
-        h_team_new_elo = h_team_elo + p_home
-        a_team_new_elo = a_team_elo + p_away
-
+        p = k * g * (w-w_e)
+        h_team_new_elo = h_team_elo + p
+        a_team_new_elo = a_team_elo - p
         return h_team_new_elo, a_team_new_elo
