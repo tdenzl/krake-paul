@@ -74,4 +74,6 @@ class Executor:
         #Preprocessor.preprocess_table("player_stats")
         #Preprocessor.preprocess_table("player_ratings")
         #Preprocessor.preprocess_table("team_elo")
-        Preprocessor.preprocess_table("team_lin_regs")
+        #Preprocessor.preprocess_table("team_lin_regs")
+        #Preprocessor.preprocess_table("player_mapping")
+        Preprocessor.preprocess_table("team_fifa_rating")
