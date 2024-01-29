@@ -10,6 +10,14 @@ import os
 import json
 class Executor:
 
+# TODO: referee profile (avg yellow cards, avg red cards)
+# TODO: avg elo diff last 5 games
+# TODO: weather API
+# TODO: coach elo, coach games with team, coach team elo, coach avg elo diff last 5 games
+# TODO: team profile, win lose, standard deviation, change in line-up +-
+# TODO: player elo instead of team elo
+
+
     def execute(self):
         self.start_year = 13
         self.end_year = 24
@@ -62,10 +70,8 @@ class Executor:
         print("starting preprocessing")
         #Preprocessor.preprocess_table("coaches")
         #Preprocessor.preprocess_table("match_info")
-        Preprocessor.preprocess_table("team_stats")
+        #Preprocessor.preprocess_table("team_stats")
         #Preprocessor.preprocess_table("player_stats")
         #Preprocessor.preprocess_table("player_ratings")
-
-    def _calculate_elos(self):
-        result = EloCalculator.calculcate_new_elos(630,500,3,1)
-        print(result[0],result[1])
+        #Preprocessor.preprocess_table("team_elo")
+        Preprocessor.preprocess_table("team_lin_regs")

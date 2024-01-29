@@ -5,11 +5,7 @@ import time
 from datetime import datetime
 import pandas as pd
 import numpy as np
-from multiprocessing import Pool
-import hashlib
-from .job_bookmark import JobBookmark
-from copy import deepcopy
-from tqdm import tqdm
+from sklearn import linear_model
 from .elo_calculator import EloCalculator
 
 import os
@@ -28,6 +24,8 @@ class Preprocessor:
         if table_name == "team_stats": cls._preprocess_team_stats()
         if table_name == "player_stats": cls._preprocess_player_stats()
         if table_name == "player_ratings": cls._preprocess_player_ratings()
+        if table_name == "team_elo": cls._calculate_elos()
+        if table_name == "team_lin_regs": cls._calculate_team_linear_regressions()
 
     @classmethod
     def _read_parquet(cls, base_path):
@@ -182,7 +180,8 @@ class Preprocessor:
         cls._write_parquet(df_player_ratings, './data/silver/player_ratings/player_ratings.parquet')
 
     @classmethod
-    def _calculate_elos(cls, df_team_stats):
+    def _calculate_elos(cls):
+        df_team_stats = cls._read_parquet('./data/silver/team_stats/*')
         goal_data = df_team_stats.groupby(["season_start", "match_day","game_id","indicator","team_name"])['goals'].sum().reset_index()
         goal_data_home = goal_data.loc[goal_data['indicator'] == "home"].rename(columns={"team_name":"home_team_name","goals":"home_goals"}).drop(columns=["indicator"])
         goal_data_away = goal_data.loc[goal_data['indicator'] == "away"].rename(columns={"team_name": "away_team_name", "goals": "away_goals"}).drop(columns=["indicator"])
@@ -226,3 +225,25 @@ class Preprocessor:
                         continue
                 matchday = 50
         return previous_elo
+
+    @classmethod
+    def _calculate_team_linear_regressions(cls):
+        df_team_stats = cls._read_parquet('./data/silver/team_stats/*')
+        df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id","kick_off_date"]]
+        df_team_stats = df_team_stats.merge(df_match_info, on=["game_id"], how="inner")
+        #df_team_stats["kick_off_date"] = pd.to_datetime(df_team_stats['kick_off_date'], unit='s')
+        lin_reg_cols = ["total_passes"]
+
+        df_teams = df_team_stats.groupby('team_name')
+        df_teams_stat_list = [df_teams.get_group(x) for x in df_teams.groups]
+        for df_team_stat in df_teams_stat_list:
+            for lin_reg_col in lin_reg_cols:
+                df_team_stat = df_team_stat[df_team_stat[lin_reg_col].notnull()]
+                first_matchday = df_team_stat["kick_off_date"].min()
+                X = (df_team_stat["kick_off_date"] - first_matchday).dt.days.values.reshape(-1, 1)
+                y = df_team_stat[lin_reg_col].values
+                reg = linear_model.LinearRegression().fit(X, y)
+                print(reg.coef_)
+            break
+
+
