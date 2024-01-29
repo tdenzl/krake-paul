@@ -388,22 +388,76 @@ class Preprocessor:
         df_players_kicker["fifa"] = df_players_kicker["fifa"].astype(str)
         df_players_fifa["fifa"] = df_players_fifa["fifa"].astype(str)
 
-        df_players_kicker = df_players_kicker[['game_id', 'indicator','kicker_name','fifa']]
-        df_players_fifa = df_players_fifa[['fifa_name', 'fifa','age']]
+        df_players_kicker = df_players_kicker[['game_id', 'indicator','kicker_name','fifa','league_code']]
+        df_players_fifa = df_players_fifa.drop_duplicates(['fifa_name', 'fifa'])
 
 
         df_team_rating = df_players_kicker.merge(df_player_mapping, on=["kicker_name"], how="inner")
         df_team_rating = df_team_rating.merge(df_players_fifa, on=["fifa_name","fifa"], how="inner")
 
-        df_team_rating = df_team_rating.drop(columns=["kicker_name","fifa_name"])
-
-        df_team_rating = df_team_rating[['game_id','indicator','age']]
+        df_team_rating = df_team_rating.drop(columns=["kicker_name"])
         print(len(df_team_rating.index))
+
+        compile_cols_dict={"ball_skills":["ball_control","dribbling"],
+                           "defense":["slide_tackle", "stand_tackle"],
+                            "mental":["aggression", "reactions", "att_position", "interceptions", "vision", "composure"],
+                            "passing":["crossing", "short_pass", "long_pass"],
+                            "physical":["acceleration", "stamina", "strength", "balance", "sprint_speed", "agility", "jumping"],
+                            "shooting":["heading", "shot_power", "finishing", "long_shots", "curve", "fk_acc", "penalties", "volleys"],
+                            "goal_keeper":["gk_positioning", "gk_diving", "gk_handling", "gk_kicking", "gk_reflexes"]}
+
+        df_team_rating["gk"] = 1
+        #df_team_rating["def"] = 1
+        #df_team_rating["mid"] = 1
+        #df_team_rating["att"] = 1
+        df_team_rating.loc[df_team_rating["position_x"] != 0.00, "gk"] = 0
+        df_team_rating.loc[df_team_rating["position_y"] != 0.00, "gk"] = 0
+        df_team_rating.loc[df_team_rating["gk"] != 1, "goal_keeper"] = None
+
+        for category, column_list in compile_cols_dict.items():
+            df_team_rating[category] = 0
+            for column in column_list:
+                df_team_rating[category] = df_team_rating[category] + df_team_rating[column]
+            df_team_rating[category] = df_team_rating[category]/ len(column_list)
+            df_team_rating = df_team_rating.drop(columns=column_list)
+
+        df_team_rating_agg = df_team_rating.groupby(['game_id','indicator','league_code']).agg(
+            players_captured=('fifa_name', np.count_nonzero),
+            age_mean=('age', np.mean),
+            age_stdev=('age', np.std),
+            height_mean=('height', np.mean),
+            height_stdev=('height', np.std),
+            weight_mean=('weight', np.mean),
+            weight_stdev=('weight', np.std),
+            weak_foot__mean=('weak_foot', np.mean),
+            skill_mean=('skill_moves', np.mean),
+            position_x_mean=('position_x', np.mean),
+            position_y_mean=('position_y', np.mean),
+            ball_skills_mean=('ball_skills', np.mean),
+            ball_skills_stdev=('ball_skills', np.std),
+            defense_mean=('defense', np.mean),
+            defense_stdev=('defense', np.std),
+            mental_mean=('mental', np.mean),
+            mental_stdev=('mental', np.std),
+            passing_mean=('passing', np.mean),
+            passing_stdev=('passing', np.std),
+            physical_mean=('physical', np.mean),
+            physical_stdev=('physical', np.std),
+            shooting_mean=('shooting', np.mean),
+            shooting_stdev=('shooting', np.std),
+            goal_keeper_mean=('goal_keeper', np.mean),
+            gk_captured=('gk', np.count_nonzero),
+        ).reset_index()
+
+        #print(df_team_rating_agg)
+        cls._write_parquet(df_team_rating_agg, './data/silver/team_ratings/team_ratings.parquet')
+        """
         df_teams = df_team_rating.groupby(['game_id','indicator'])
         df_line_up_list = [df_teams.get_group(x) for x in df_teams.groups]
         for df_line_up in df_line_up_list:
             print(df_line_up)
             break
+        """
 
     @classmethod
     def _clean_kicker_name_string(cls, df):
