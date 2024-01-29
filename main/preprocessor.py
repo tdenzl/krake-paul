@@ -8,7 +8,7 @@ import numpy as np
 from sklearn import linear_model
 from .elo_calculator import EloCalculator
 pd.options.mode.chained_assignment = None  # default='warn'
-import os
+from tqdm import tqdm
 import glob
 
 
@@ -250,30 +250,45 @@ class Preprocessor:
         #df_team_stats["kick_off_date"] = pd.to_datetime(df_team_stats['kick_off_date'], unit='s')
         lin_reg_cols = ["total_passes"]
 
+        reg_df_list = []
+
         df_teams = df_team_stats.groupby('team_name')
         df_teams_stat_list = [df_teams.get_group(x) for x in df_teams.groups]
-        for df_team_stat in df_teams_stat_list:
-            for lin_reg_col in lin_reg_cols:
-                df_team_stat = df_team_stat[df_team_stat[lin_reg_col].notnull()]
-                first_matchday = df_team_stat["kick_off_date"].min()
-                last_matchday = df_team_stat["kick_off_date"].max()
-                df_team_stat['total_days'] = (last_matchday - first_matchday + pd.to_timedelta(1, unit='D')).days
-                df_team_stat['day_since_first_kickoff'] = ((df_team_stat["kick_off_date"] - first_matchday + pd.to_timedelta(1, unit='D')).dt.days.values)
-                df_team_stat['norm_weight'] = (df_team_stat['day_since_first_kickoff'] / df_team_stat['total_days'])
+        for df_team_stat in tqdm(df_teams_stat_list):
+            df_team_stat = df_team_stat[df_team_stat["kick_off_date"].notnull()]
+            kick_off_dates = df_team_stat['kick_off_date'].drop_duplicates().sort_values(ascending=True).tolist()
+            for kick_off_date in kick_off_dates:
+                df_team_stat_pit = df_team_stat[df_team_stat["kick_off_date"]<kick_off_date]
+                df_team_stat_entry = df_team_stat[["game_id","team_name","kick_off_date"]][df_team_stat["kick_off_date"]==kick_off_date]
+                for lin_reg_col in lin_reg_cols:
+                    df_team_stat_pit_col = df_team_stat_pit[df_team_stat_pit[lin_reg_col].notnull()]
+                    if len(df_team_stat_pit_col.index)<=5:
+                        #print("skip")
+                        df_team_stat_entry[lin_reg_col + "_intercept"] = None
+                        df_team_stat_entry[lin_reg_col + "_coefficient"] = None
+                        continue
 
-                #df_team_stat["log_weight"] = np.log(df_team_stat['norm_weight'])
-                q = 4
-                df_team_stat["q_weight"] = (1//1.03+(df_team_stat['norm_weight']**q))
-                #X = (df_team_stat["kick_off_date"] - first_matchday).dt.days.values.reshape(-1, 1)
+                    first_matchday = df_team_stat_pit_col["kick_off_date"].min()
+                    last_matchday = df_team_stat_pit_col["kick_off_date"].max()
+                    df_team_stat_pit_col['total_days'] = (last_matchday - first_matchday + pd.to_timedelta(1, unit='D')).days
+                    df_team_stat_pit_col['day_since_first_kickoff'] = ((df_team_stat_pit_col["kick_off_date"] - first_matchday + pd.to_timedelta(1, unit='D')).dt.days.values)
+                    df_team_stat_pit_col['norm_weight'] = (df_team_stat_pit_col['day_since_first_kickoff'] / df_team_stat_pit_col['total_days'])
+    
+                    #df_team_stat_pit_col["log_weight"] = np.log(df_team_stat_pit_col['norm_weight'])
+                    q = 2
+                    df_team_stat_pit_col["q_weight"] = (1//1.03+(df_team_stat_pit_col['norm_weight']**q))
+                    #X = (df_team_stat_pit_col["kick_off_date"] - first_matchday).dt.days.values.reshape(-1, 1)
 
+                    X = df_team_stat_pit_col["elo_diff"].values.reshape((-1, 1))
+                    y = df_team_stat_pit_col[lin_reg_col]
+                    weights = df_team_stat_pit_col["q_weight"]
+                    reg = linear_model.LinearRegression().fit(X, y, weights)
+                    #print("intercept=", reg.intercept_, " coefficient=", reg.coef_)
+                    df_team_stat_entry[lin_reg_col + "_intercept"] = reg.intercept_
+                    df_team_stat_entry[lin_reg_col + "_coefficient"] = reg.coef_[0]
+                reg_df_list.append(df_team_stat_entry)
 
-                X = df_team_stat["elo_diff"].values.reshape((-1, 1))
-                y = df_team_stat[lin_reg_col]
-                weights = df_team_stat["q_weight"]
-                reg = linear_model.LinearRegression().fit(X, y, weights)
-                
-                print("intercept=",reg.intercept_," coefficient=",reg.coef_)
-                break
-            break
-            
+        df_lin_reg = pd.concat(reg_df_list)
+        cls._write_parquet(df_lin_reg, './data/silver/team_profiles_lin_reg/team_profiles_lin_reg.parquet')
+
 
