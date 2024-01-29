@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from sklearn import linear_model
 from .elo_calculator import EloCalculator
-
+pd.options.mode.chained_assignment = None  # default='warn'
 import os
 import glob
 
@@ -230,7 +230,23 @@ class Preprocessor:
     def _calculate_team_linear_regressions(cls):
         df_team_stats = cls._read_parquet('./data/silver/team_stats/*')
         df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id","kick_off_date"]]
+        df_elo_diff =  cls._read_parquet('./data/silver/team_elo/*')
+
+        df_home_elo_diff = df_elo_diff
+        df_home_elo_diff["elo_diff"] = df_home_elo_diff["home_elo"] - df_home_elo_diff["away_elo"]
+        df_home_elo_diff = df_home_elo_diff.rename(columns={'home_team': 'team_name'})
+        df_home_elo_diff = df_home_elo_diff[["game_id","elo_diff", "team_name"]]
+
+        df_away_elo_diff = df_elo_diff
+        df_away_elo_diff["elo_diff"] = df_away_elo_diff["away_elo"] - df_away_elo_diff["home_elo"]
+        df_away_elo_diff = df_away_elo_diff.rename(columns={'away_team': 'team_name'})
+        df_away_elo_diff = df_away_elo_diff[["game_id","elo_diff", "team_name"]]
+
+        df_elo_diff = pd.concat([df_home_elo_diff,df_away_elo_diff])
+
         df_team_stats = df_team_stats.merge(df_match_info, on=["game_id"], how="inner")
+        df_team_stats = df_team_stats.merge(df_elo_diff, on=["game_id","team_name"], how="left")
+
         #df_team_stats["kick_off_date"] = pd.to_datetime(df_team_stats['kick_off_date'], unit='s')
         lin_reg_cols = ["total_passes"]
 
@@ -240,10 +256,24 @@ class Preprocessor:
             for lin_reg_col in lin_reg_cols:
                 df_team_stat = df_team_stat[df_team_stat[lin_reg_col].notnull()]
                 first_matchday = df_team_stat["kick_off_date"].min()
-                X = (df_team_stat["kick_off_date"] - first_matchday).dt.days.values.reshape(-1, 1)
-                y = df_team_stat[lin_reg_col].values
-                reg = linear_model.LinearRegression().fit(X, y)
-                print(reg.coef_)
-            break
+                last_matchday = df_team_stat["kick_off_date"].max()
+                df_team_stat['total_days'] = (last_matchday - first_matchday + pd.to_timedelta(1, unit='D')).days
+                df_team_stat['day_since_first_kickoff'] = ((df_team_stat["kick_off_date"] - first_matchday + pd.to_timedelta(1, unit='D')).dt.days.values)
+                df_team_stat['norm_weight'] = (df_team_stat['day_since_first_kickoff'] / df_team_stat['total_days'])
 
+                #df_team_stat["log_weight"] = np.log(df_team_stat['norm_weight'])
+                q = 4
+                df_team_stat["q_weight"] = (1//1.03+(df_team_stat['norm_weight']**q))
+                #X = (df_team_stat["kick_off_date"] - first_matchday).dt.days.values.reshape(-1, 1)
+
+
+                X = df_team_stat["elo_diff"].values.reshape((-1, 1))
+                y = df_team_stat[lin_reg_col]
+                weights = df_team_stat["q_weight"]
+                reg = linear_model.LinearRegression().fit(X, y, weights)
+                
+                print("intercept=",reg.intercept_," coefficient=",reg.coef_)
+                break
+            break
+            
 
