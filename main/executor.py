@@ -2,10 +2,10 @@ from .kicker_scraper import KickerScraper
 from .fifa_scraper import FifaScraper
 from .job_bookmark import JobBookmark
 from .preprocessor import Preprocessor
-from .elo_calculator import EloCalculator
+from .ingestor_v1 import IngestorV1
+from .model_train_v1 import ModelV1
 
 from multiprocessing import Pool
-import time
 import os
 import json
 class Executor:
@@ -24,7 +24,7 @@ class Executor:
         #self._scrape_kicker_data_multiprocessing()
         #self._scrape_fifa_rating_data()
         self._preprocess()
-        #self._calculate_elos()
+        #self._ingestion()
 
 
     def _scrape_kicker_data(self, load_type="latest"):
@@ -76,4 +76,14 @@ class Executor:
         #Preprocessor.preprocess_table("team_elo")
         #Preprocessor.preprocess_table("team_lin_regs")
         #Preprocessor.preprocess_table("player_mapping")
-        Preprocessor.preprocess_table("team_fifa_rating")
+        #Preprocessor.preprocess_table("team_fifa_rating")
+        #Preprocessor.preprocess_table("referee_profiles")
+        #Preprocessor.preprocess_table("player_elo")
+        Preprocessor.preprocess_table("relationships")
+
+
+    def _ingestion(self):
+        IngestorV1.create_ingestion_data()
+
+    def _train(self):
+        ModelV1.train()

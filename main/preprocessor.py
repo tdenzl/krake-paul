@@ -30,6 +30,10 @@ class Preprocessor:
         if table_name == "team_lin_regs": cls._calculate_team_linear_regressions()
         if table_name == "player_mapping": cls._player_mapping_kicker_fifa()
         if table_name == "team_fifa_rating": cls._team_fifa_rating()
+        if table_name == "referee_profiles": cls._referee_profiles()
+        if table_name == "coach_elo": cls._coach_elo()
+        if table_name == "player_elo": cls._player_elo()
+        if table_name == "relationships": cls._relationships()
 
 
     @classmethod
@@ -262,13 +266,15 @@ class Preprocessor:
 
         df_home_elo_diff = df_elo_diff
         df_home_elo_diff["elo_diff"] = df_home_elo_diff["home_elo"] - df_home_elo_diff["away_elo"]
+        df_home_elo_diff["elo_gain"] = df_home_elo_diff["new_home_elo"] - df_home_elo_diff["home_elo"]
         df_home_elo_diff = df_home_elo_diff.rename(columns={'home_team': 'team_name'})
-        df_home_elo_diff = df_home_elo_diff[["game_id", "elo_diff", "team_name"]]
+        df_home_elo_diff = df_home_elo_diff[["game_id", "elo_diff", "elo_gain", "team_name"]]
 
         df_away_elo_diff = df_elo_diff
         df_away_elo_diff["elo_diff"] = df_away_elo_diff["away_elo"] - df_away_elo_diff["home_elo"]
+        df_away_elo_diff["elo_gain"] = df_away_elo_diff["new_away_elo"] - df_away_elo_diff["away_elo"]
         df_away_elo_diff = df_away_elo_diff.rename(columns={'away_team': 'team_name'})
-        df_away_elo_diff = df_away_elo_diff[["game_id", "elo_diff", "team_name"]]
+        df_away_elo_diff = df_away_elo_diff[["game_id", "elo_diff", "elo_gain", "team_name"]]
 
         df_elo_diff = pd.concat([df_home_elo_diff, df_away_elo_diff])
 
@@ -277,7 +283,7 @@ class Preprocessor:
 
         lin_reg_cols = ["shots_on_goal", "distance", "total_passes", "pass_ratio", "crosses", "cross_ratio",
                         "dribblings", "dribble_ratio", "possession", "tackles", "tackle_ratio", "air_tackles",
-                        "air_tackle_ratio", "fouls", "got_fouled", "offside", "corners"]
+                        "air_tackle_ratio", "fouls", "got_fouled", "offside", "corners", "elo_gain", "goals"]
         reg_df_list = []
 
         df_teams = df_team_stats.groupby('team_name')
@@ -287,7 +293,7 @@ class Preprocessor:
             kick_off_dates = df_team_stat['kick_off_date'].drop_duplicates().sort_values(ascending=True).tolist()
             for kick_off_date in kick_off_dates:
                 df_team_stat_pit = df_team_stat[df_team_stat["kick_off_date"] < kick_off_date]
-                df_team_stat_entry = df_team_stat[["game_id", "team_name", "kick_off_date"]][
+                df_team_stat_entry = df_team_stat[["game_id", "team_name", "indicator", "kick_off_date"]][
                     df_team_stat["kick_off_date"] == kick_off_date]
                 for lin_reg_col in lin_reg_cols:
                     df_team_stat_pit_col = df_team_stat_pit[df_team_stat_pit[lin_reg_col].notnull()]
@@ -451,13 +457,251 @@ class Preprocessor:
 
         #print(df_team_rating_agg)
         cls._write_parquet(df_team_rating_agg, './data/silver/team_ratings/team_ratings.parquet')
-        """
-        df_teams = df_team_rating.groupby(['game_id','indicator'])
-        df_line_up_list = [df_teams.get_group(x) for x in df_teams.groups]
-        for df_line_up in df_line_up_list:
-            print(df_line_up)
-            break
-        """
+
+
+    @classmethod
+    def _referee_profiles(cls):
+        df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id","referee","kick_off_date"]]
+
+        df_players_stats = cls._read_parquet('./data/silver/player_stats/*').groupby(['game_id','indicator']).agg(
+            yellow_cards=('yellow_card', np.sum),
+            yellow_red_cards=('yellow_red_card', np.sum),
+            red_cards=('red_card', np.sum)).reset_index()
+        df_players_stats_home = df_players_stats.loc[df_players_stats["indicator"] == "home"].rename(columns={'yellow_cards': 'yellow_cards_home','yellow_red_cards': 'yellow_red_cards_home','red_cards': 'red_cards_home'}).drop(columns=["indicator"])
+        df_players_stats_away = df_players_stats.loc[df_players_stats["indicator"] == "away"].rename(columns={'yellow_cards': 'yellow_cards_away','yellow_red_cards': 'yellow_red_cards_away','red_cards': 'red_cards_away'}).drop(columns=["indicator"])
+
+        df_card_stats = df_players_stats_home.merge(df_players_stats_away, on=["game_id"], how="inner")
+
+        df_team_stats = cls._read_parquet('./data/silver/team_stats/*')[["game_id","indicator","goals"]]
+        df_elo_diff = cls._read_parquet('./data/silver/team_elo/*')
+        df_elo_diff["elo_diff"] = df_elo_diff["home_elo"] - df_elo_diff["away_elo"]
+        df_elo_diff = df_elo_diff[["game_id","elo_diff"]]
+        df_team_stats = df_team_stats.merge(df_elo_diff, on=["game_id"], how="left")
+
+        df_team_stats.loc[df_team_stats["indicator"] == "away", 'goals'] = -1 * df_team_stats["goals"]
+        df_team_stats_agg = df_team_stats.groupby('game_id').agg(
+            goal_diff=('goals', np.sum),
+            elo_diff=('elo_diff', np.sum)).reset_index()
+
+        df_team_stats_agg['hxa'] = np.where(df_team_stats_agg['goal_diff'] < 0, -1,
+                        np.where(df_team_stats_agg['goal_diff'] == 0, 0, 1))
+
+        df_referees = df_match_info.merge(df_card_stats, on=["game_id"], how="left")
+        df_referees = df_referees.merge(df_team_stats_agg, on=["game_id"], how="left")
+
+        df_referees["cards_home"] = df_referees["yellow_cards_home"] + df_referees["yellow_red_cards_home"]*1.7 + df_referees["red_cards_home"]*2
+        df_referees["cards_away"] = df_referees["yellow_cards_away"] + df_referees["yellow_red_cards_away"]*1.7 + df_referees["red_cards_away"]*2
+        df_referees["cards_diff"] = df_referees["cards_home"] - df_referees["cards_away"]
+
+        reg_df_list = []
+        lin_reg_cols = ["cards_home","cards_away","cards_diff","goal_diff","hxa"]
+        df_referees = df_referees.groupby('referee')
+        df_referees_stat_list = [df_referees.get_group(x) for x in df_referees.groups]
+        for df_referee_stat in tqdm(df_referees_stat_list):
+            df_referee_stat = df_referee_stat[df_referee_stat["kick_off_date"].notnull()]
+            kick_off_dates = df_referee_stat['kick_off_date'].drop_duplicates().sort_values(ascending=True).tolist()
+            for kick_off_date in kick_off_dates:
+                df_referee_stat_pit = df_referee_stat[df_referee_stat["kick_off_date"] < kick_off_date]
+                df_referee_stat_entry = df_referee_stat[["game_id", "referee", "kick_off_date"]][
+                    df_referee_stat["kick_off_date"] == kick_off_date]
+                for lin_reg_col in lin_reg_cols:
+                    df_referee_stat_pit_col = df_referee_stat_pit[df_referee_stat_pit[lin_reg_col].notnull()]
+                    if len(df_referee_stat_pit.index) <= 5:
+                        # print("skip")
+                        df_referee_stat_entry[lin_reg_col + "_intercept"] = None
+                        df_referee_stat_entry[lin_reg_col + "_coefficient"] = None
+                        continue
+                    first_matchday = df_referee_stat_pit_col["kick_off_date"].min()
+                    last_matchday = df_referee_stat_pit_col["kick_off_date"].max()
+                    df_referee_stat_pit_col['total_days'] = (
+                            last_matchday - first_matchday + pd.to_timedelta(1, unit='D')).days
+                    df_referee_stat_pit_col['day_since_first_kickoff'] = ((df_referee_stat_pit_col[
+                                                                            "kick_off_date"] - first_matchday + pd.to_timedelta(
+                        1, unit='D')).dt.days.values)
+                    df_referee_stat_pit_col['norm_weight'] = (df_referee_stat_pit_col['day_since_first_kickoff'] / df_referee_stat_pit_col['total_days'])
+
+                    """
+                    # df_team_stat_pit_col["log_weight"] = np.log(df_team_stat_pit_col['norm_weight'])
+                    q = 2
+                    df_referee_stat_pit_col["q_weight"] = (1 // 1.03 + (df_referee_stat_pit_col['norm_weight'] ** q))
+                    # X = (df_team_stat_pit_col["kick_off_date"] - first_matchday).dt.days.values.reshape(-1, 1)
+                    """
+
+                    X = df_referee_stat_pit_col["elo_diff"].values.reshape((-1, 1))
+                    y = df_referee_stat_pit_col[lin_reg_col]
+                    weights = df_referee_stat_pit_col["norm_weight"]
+                    reg = linear_model.LinearRegression().fit(X, y, weights)
+                    # print("intercept=", reg.intercept_, " coefficient=", reg.coef_)
+                    df_referee_stat_entry[lin_reg_col + "_intercept"] = reg.intercept_
+                    df_referee_stat_entry[lin_reg_col + "_coefficient"] = reg.coef_[0]
+                    df_referee_stat_entry[lin_reg_col + "_intercept"] = df_referee_stat_entry[
+                        lin_reg_col + "_intercept"].round(6)
+                    df_referee_stat_entry[lin_reg_col + "_coefficient"] = df_referee_stat_entry[
+                        lin_reg_col + "_coefficient"].round(6)
+                reg_df_list.append(df_referee_stat_entry)
+        df_lin_reg = pd.concat(reg_df_list)
+
+        # print(df_team_rating_agg)
+        cls._write_parquet(df_lin_reg, './data/silver/referee_profiles/referee_profiles.parquet')
+
+    @classmethod
+    def _player_elo(cls):
+        df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id", "kick_off_date"]]
+        df_player_stats = cls._read_parquet('./data/silver/player_stats/*')[["game_id", "player_name", "indicator"]]
+
+
+        df_team_stats = cls._read_parquet('./data/silver/team_stats/*')
+        df_team_stats = df_team_stats.merge(df_match_info, on=["game_id"], how="inner")
+
+        goal_data = df_team_stats.groupby(["game_id", "kick_off_date", "indicator"])[
+            'goals'].sum().reset_index()
+        goal_data_home = goal_data.loc[goal_data['indicator'] == "home"].rename(
+            columns={"goals": "home_goals"}).drop(columns=["indicator"])
+        goal_data_away = goal_data.loc[goal_data['indicator'] == "away"].rename(
+            columns={"goals": "away_goals"}).drop(
+            columns=["indicator", "kick_off_date"])
+        goal_data = goal_data_home.merge(goal_data_away, on=["game_id"], how="inner").sort_values(by=["kick_off_date"],
+                                                                                                  ascending=True)
+        goal_data = df_player_stats.merge(goal_data, on=["game_id"], how="inner")
+
+        df_player_elo = cls._read_parquet('./data/silver/player_elo/*')[["player_name", "kick_off_date", "new_player_elo"]]
+        print(df_player_elo.to_dict('records'))
+        return
+        game_elo_dict = {}
+        player_elo_dict = {}
+        elo_list = []
+        for idx, row in tqdm(goal_data.iterrows()):
+            game_id = row["game_id"]
+            indicator = row["indicator"]
+            kick_off_date = row["kick_off_date"]
+            player_name = row["player_name"]
+            home_goals = row["home_goals"]
+            away_goals = row["away_goals"]
+
+
+            df_player = goal_data.loc[goal_data['player_name'] == player_name]
+            df_player['p_kick_off_date'] = df_player["kick_off_date"].shift(1)
+            last_game_date = df_player.loc[df_player['game_id'] == game_id]["p_kick_off_date"].iloc[0]
+            if player_elo_dict.get(player_name) is None: player_elo_dict[player_name] = dict()
+            if player_elo_dict.get(player_name).get(last_game_date) is None: player_elo_dict[player_name][last_game_date] = 1300
+            player_elo = player_elo_dict.get(player_name).get(last_game_date)
+
+            if indicator == "home": opponent_indicator = "away"
+            else: opponent_indicator = "home"
+            try:
+                opponnent_elo = game_elo_dict[game_id][opponent_indicator]
+            except KeyError:
+                opponnent_elo = None
+            if opponnent_elo is None:
+                opponnent_elo = 0
+                opponent_players = goal_data.loc[goal_data["game_id"] == game_id]
+                opponent_players = opponent_players.loc[goal_data["indicator"] == opponent_indicator]["player_name"].tolist()
+                for opponent_player in opponent_players:
+                    df_opponent_player = goal_data.loc[goal_data['player_name'] == opponent_player]
+                    df_opponent_player['p_kick_off_date'] = df_opponent_player["kick_off_date"].shift(1)
+                    last_game_date =  df_opponent_player.loc[df_opponent_player['game_id'] == game_id]["p_kick_off_date"].iloc[0]
+                    if player_elo_dict.get(opponent_player) is None: player_elo_dict[opponent_player] = dict()
+                    if player_elo_dict.get(opponent_player).get(last_game_date) is None: player_elo_dict[opponent_player][last_game_date] = 1300
+                    opponnent_elo += player_elo_dict.get(opponent_player).get(last_game_date)
+                opponnent_elo = opponnent_elo/len(opponent_players)
+
+            new_player_elo, new_opponnent_elo = EloCalculator.calculcate_new_elos(player_elo, opponnent_elo, home_goals, away_goals)
+            player_elo_dict[player_name][kick_off_date] = new_player_elo
+            elo_list.append({"game_id": game_id, "kick_off_date": kick_off_date, "player_name": player_name,
+                             "old_player_elo": player_elo, "new_player_elo": new_player_elo,"opponnent_elo":opponnent_elo,"home_goals": home_goals,
+                             "away_goals": away_goals})
+        df_elo = pd.DataFrame(elo_list)
+        cls._write_parquet(df_elo, './data/silver/player_elo/player_elo.parquet')
+
+    @classmethod
+    def _coach_elo(cls):
+        df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id", "kick_off_date"]]
+        df_coaches = cls._read_parquet('./data/silver/coaches/*')[["game_id","coach_name","indicator"]]
+        df_coach_stats = df_coaches.merge(df_match_info, on=["game_id"],how="inner")
+
+        df_team_stats = cls._read_parquet('./data/silver/team_stats/*')
+        df_coach_stats = df_coach_stats.merge(df_team_stats, on=["game_id","indicator"], how="inner")
+        goal_data = df_coach_stats.groupby(["game_id", "kick_off_date", "indicator", "coach_name"])['goals'].sum().reset_index()
+        goal_data_home = goal_data.loc[goal_data['indicator'] == "home"].rename(
+            columns={"coach_name": "home_coach_name", "goals": "home_goals"}).drop(columns=["indicator"])
+        goal_data_away = goal_data.loc[goal_data['indicator'] == "away"].rename(
+            columns={"coach_name": "away_coach_name", "goals": "away_goals"}).drop(columns=["indicator","kick_off_date"])
+        goal_data = goal_data_home.merge(goal_data_away, on=["game_id"], how="inner").sort_values(by=["kick_off_date"], ascending=True)
+
+        elo_dict = {}
+        elo_list = []
+        for idx, row in tqdm(goal_data.iterrows()):
+            game_id = row["game_id"]
+            kick_off_date = row["kick_off_date"]
+            home_coach = row["home_coach_name"]
+            away_coach = row["away_coach_name"]
+            home_goals = row["home_goals"]
+            away_goals = row["away_goals"]
+
+            df_coach_stats_home = df_coach_stats.loc[df_coach_stats['coach_name'] == home_coach]
+            df_coach_stats_home['p_kick_off_date'] = df_coach_stats_home["kick_off_date"].shift(1)
+            latest_kick_off_date_home_coach = df_coach_stats_home.loc[df_coach_stats_home['game_id'] == game_id]["p_kick_off_date"].iloc[0]
+
+            df_coach_stats_away = df_coach_stats.loc[df_coach_stats['coach_name'] == away_coach]
+            df_coach_stats_away['p_kick_off_date'] = df_coach_stats_away["kick_off_date"].shift(1)
+            latest_kick_off_date_away_coach = df_coach_stats_away.loc[df_coach_stats_away['game_id'] == game_id]["p_kick_off_date"].iloc[0]
+
+
+            if elo_dict.get(home_coach) is None: elo_dict[home_coach] = dict()
+            if elo_dict.get(away_coach) is None: elo_dict[away_coach] = dict()
+            if elo_dict.get(home_coach).get(latest_kick_off_date_home_coach) is None: elo_dict[home_coach][latest_kick_off_date_home_coach] = 1300
+            if elo_dict.get(away_coach).get(latest_kick_off_date_away_coach) is None: elo_dict[away_coach][latest_kick_off_date_away_coach] = 1300
+            old_home_elo = elo_dict[home_coach][latest_kick_off_date_home_coach]
+            old_away_elo = elo_dict[away_coach][latest_kick_off_date_away_coach]
+            new_home_elo, new_away_elo = EloCalculator.calculcate_new_elos(old_home_elo, old_away_elo, home_goals,
+                                                                           away_goals)
+            elo_dict[home_coach][kick_off_date] = new_home_elo
+            elo_dict[away_coach][kick_off_date] = new_away_elo
+            elo_list.append({"game_id": game_id, "kick_off_date": kick_off_date,"home_coach": home_coach,
+                           "home_elo": old_home_elo, "new_home_elo": new_home_elo, "home_goals": home_goals,
+                           "away_goals": away_goals, "away_elo": old_away_elo, "new_away_elo": new_away_elo,
+                           "away_coach": away_coach})
+
+        df_elo = pd.DataFrame(elo_list)
+        cls._write_parquet(df_elo, './data/silver/coach_elo/coach_elo.parquet')
+
+    @classmethod
+    def _relationships(cls):
+        df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id","kick_off_date"]]
+        df_coaches = cls._read_parquet('./data/silver/coaches/*')[["game_id", "coach_name","indicator"]].rename(
+            columns={"coach_name": "name"})
+        df_player_stats = cls._read_parquet('./data/silver/player_stats/*')[["game_id", "player_name","indicator"]].rename(
+            columns={"player_name": "name"})
+
+        df_relationships = pd.concat([df_coaches, df_player_stats])
+        df_relationships = df_match_info.merge(df_relationships, on=["game_id"],how="inner").sort_values(by=["kick_off_date"], ascending=True)
+        relationship_dict = {}
+        game_relationship_dict = {}
+        i = 0
+        for idx, row in tqdm(df_relationships.iterrows()):
+            game_id = row["game_id"]
+            player = row["name"]
+            indicator = row["indicator"]
+            if game_relationship_dict.get(game_id) is None:
+                game_relationship_dict[game_id] = {"home":0,"away":0}
+
+            if relationship_dict.get(player) is None: relationship_dict[player] = dict()
+            co_players = df_relationships[df_relationships["game_id"]==game_id]["name"].tolist()
+            for co_player in co_players:
+                if player == co_player: continue
+                if relationship_dict.get(player).get(co_player) is None: relationship_dict[player][co_player] = 0
+                relationship_dict[player][co_player] += 1
+                game_relationship_dict[game_id][indicator] += relationship_dict[player][co_player]
+
+        team_relationship_list = []
+        for game_id, indicator_dict in game_relationship_dict.items():
+            relationships_home = indicator_dict.get("home")
+            relationships_away = indicator_dict.get("away")
+            relationships_diff = indicator_dict.get("home") - indicator_dict.get("away")
+            team_relationship_list.append({"game_id": game_id, "relationships_home": relationships_home, "relationships_away": relationships_away, "relationships_diff": relationships_diff})
+
+        df_relationships = pd.DataFrame(team_relationship_list)
+        cls._write_parquet(df_relationships, './data/silver/relationships/relationships.parquet')
 
     @classmethod
     def _clean_kicker_name_string(cls, df):
