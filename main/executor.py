@@ -23,8 +23,9 @@ class Executor:
         self.end_year = 24
         #self._scrape_kicker_data_multiprocessing()
         #self._scrape_fifa_rating_data()
-        self._preprocess()
+        #self._preprocess()
         #self._ingestion()
+        self._train()
 
 
     def _scrape_kicker_data(self, load_type="latest"):
@@ -79,7 +80,7 @@ class Executor:
         #Preprocessor.preprocess_table("team_fifa_rating")
         #Preprocessor.preprocess_table("referee_profiles")
         #Preprocessor.preprocess_table("player_elo")
-        Preprocessor.preprocess_table("relationships")
+        #Preprocessor.preprocess_table("relationships")
 
 
     def _ingestion(self):

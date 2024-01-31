@@ -8,6 +8,7 @@ import numpy as np
 import os
 import sys
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from sklearn.model_selection import train_test_split
 
@@ -15,6 +16,10 @@ pd.options.mode.chained_assignment = None  # default='warn'
 from tqdm import tqdm
 import glob
 
+N_CLASS = 3
+N_FEATURES = 0
+TEST_SIZE = 0.3
+EPOCHS = 200
 
 class ModelV1:
 
@@ -24,14 +29,38 @@ class ModelV1:
     @classmethod
     def train(cls):
         df_ingestion = cls._read_parquet('./data/gold/model_ingestion_v1/*')
-        labels = tf.keras.utils.to_categorical(df_ingestion["outcome"])
+        labels = df_ingestion["outcome"]
+        labels = tf.keras.utils.to_categorical(labels)
+
         df_features = df_ingestion.drop(columns=["outcome"])
+        N_FEATURES = len(df_features.columns)
+        df_features = np.asarray(df_features).astype('float32')
+        normalizer = tf.keras.layers.Normalization(axis=-1)
+        normalizer.adapt(df_features)
 
+        x_train, x_test, y_train, y_test = train_test_split(
+            df_features, labels, test_size=TEST_SIZE
+        )
 
+        print("N_CLASS=", N_CLASS)
+        print("N_FEATURES=", N_FEATURES)
+        print("TEST_SIZE=", TEST_SIZE)
+        print("EPOCHS=", EPOCHS)
 
+        # Get a compiled neural network
+        model = cls._get_model(normalizer)
 
+        print(len(x_train))
+        print(len(y_train))
 
+        # Fit model on training data
+        model.fit(x_train, y_train, epochs=EPOCHS)
 
+        # Evaluate neural network performance
+        model.evaluate(x_test, y_test, verbose=2)
+
+        # Save model to file
+        model.save("./models/krake_paul_v1")
 
     @classmethod
     def _read_parquet(cls, base_path):
@@ -55,62 +84,26 @@ class ModelV1:
         print("finished writing ", file_path, " with ", len(df.index), " records")
 
 
-    # Check command-line arguments
-    if len(sys.argv) not in [2, 3]:
-        sys.exit("Usage: python traffic.py data_directory [model.h5]")
-
-    # Get image arrays and labels for all image files
-    images, labels = load_data(sys.argv[1])
-
-    # Split data into training and testing sets
-    labels = tf.keras.utils.to_categorical(labels)
-    x_train, x_test, y_train, y_test = train_test_split(
-        np.array(images), np.array(labels), test_size=TEST_SIZE
-    )
-
-    # Get a compiled neural network
-    model = get_model()
-
-    # Fit model on training data
-    model.fit(x_train, y_train, epochs=EPOCHS)
-
-    # Evaluate neural network performance
-    model.evaluate(x_test,  y_test, verbose=2)
-
-    # Save model to file
-    if len(sys.argv) == 3:
-        filename = sys.argv[2]
-        model.save(filename)
-        print(f"Model saved to {filename}.")
-
-
     @classmethod
-    def get_model():
+    def _get_model(cls, normalizer):
         """
         Returns a compiled convolutional neural network model. Assume that the
         `input_shape` of the first layer is `(IMG_WIDTH, IMG_HEIGHT, 3)`.
         The output layer should have `NUM_CATEGORIES` units, one for each category.
         """
-        model = tf.keras.models.Sequential()
-        model.add(tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(IMG_WIDTH, IMG_HEIGHT, 3)))
-        model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-        model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
-        model.add(tf.keras.layers.MaxPooling2D((2, 2)))
 
-        model.add(tf.keras.layers.Flatten())
+        model = tf.keras.Sequential([
+            normalizer,
+            tf.keras.layers.Dense(64, activation='relu'),
+            tf.keras.layers.Dropout(0.5),
+            tf.keras.layers.Dense(32, activation='relu'),
+            tf.keras.layers.Dropout(0.5),
+            tf.keras.layers.Dense(N_CLASS, activation="softmax")
+        ])
 
-        #model.add(tf.keras.layers.InputLayer(input_shape=(IMG_WIDTH,IMG_HEIGHT,3)))
+        model.compile(optimizer='adam',
+                      loss="categorical_crossentropy",
+                      metrics=['accuracy'])
 
-        model.add(tf.keras.layers.Dense(512, activation="relu"))
-        model.add(tf.keras.layers.Dropout(0.4))
-
-        model.add(tf.keras.layers.Dense(NUM_CATEGORIES, activation="softmax"))
-
-        model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
-
-
-        #model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
-        #model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-        #model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
 
         return model
