@@ -2,8 +2,13 @@ from .kicker_scraper import KickerScraper
 from .fifa_scraper import FifaScraper
 from .job_bookmark import JobBookmark
 from .preprocessor import Preprocessor
+
 from .ingestor_v1 import IngestorV1
 from .model_train_v1 import ModelV1
+
+
+from .ingestor_v2 import IngestorV2
+from .model_train_v2 import ModelV2
 
 from multiprocessing import Pool
 import os
@@ -24,7 +29,7 @@ class Executor:
         #self._scrape_kicker_data_multiprocessing()
         #self._scrape_fifa_rating_data()
         #self._preprocess()
-        #self._ingestion()
+        self._ingestion()
         self._train()
 
 
@@ -84,7 +89,9 @@ class Executor:
 
 
     def _ingestion(self):
-        IngestorV1.create_ingestion_data()
+        #IngestorV1.create_ingestion_data()
+        IngestorV2.create_ingestion_data()
 
     def _train(self):
-        ModelV1.train()
+        #ModelV1.train()
+        ModelV2.train()

@@ -14,12 +14,12 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import glob
 
-N_CLASS = 3
+N_CLASS = 2
 N_FEATURES = 0
 TEST_SIZE = 0.2
 EPOCHS = 100
 
-class ModelV1:
+class ModelV2:
 
     def __init__(self):
         self.load_timestamp = str(datetime.now())
@@ -27,7 +27,7 @@ class ModelV1:
     @classmethod
     def train(cls):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        df_ingestion = cls._read_parquet('./data/gold/model_ingestion_v1/*')
+        df_ingestion = cls._read_parquet('./data/gold/model_ingestion_v2/*')
         labels = df_ingestion["outcome"]
         labels = tf.keras.utils.to_categorical(labels)
 
@@ -58,7 +58,7 @@ class ModelV1:
         model.fit(x_train, y_train, epochs=EPOCHS)
 
         # Evaluate neural network performance
-        model.evaluate(x_test, y_test, verbose='auto')
+        model.evaluate(x_test, y_test, verbose=2)
 
         # Save model to file
         model.save("./models/krake_paul_v2")
@@ -103,7 +103,7 @@ class ModelV1:
         ])
 
         model.compile(optimizer='adam',
-                      loss="categorical_crossentropy",
+                      loss="binary_crossentropy",
                       metrics=['accuracy'])
 
 
