@@ -38,7 +38,19 @@ class IngestorV1:
             df_team_profiles_lin_reg_home = df_team_profiles_lin_reg_home.rename(columns={column:column+"_home"})
             df_team_profiles_lin_reg_away = df_team_profiles_lin_reg_away.rename(columns={column:column+"_away"})
 
-        #df_player_elo = cls._read_parquet('./data/silver/player_elo/*')
+
+        df_player_elo = cls._read_parquet('./data/silver/player_elo/*')[feature_columns.get("df_player_elo")]
+        df_player_elo = df_player_elo.groupby(['game_id', 'indicator']).agg(
+            player_elo_mean=('old_player_elo', np.mean),
+            player_elo_stdev=('old_player_elo', np.std)).reset_index()
+        df_player_elo_home = df_player_elo[df_player_elo["indicator"] == "home"].drop(columns=["indicator"])
+        df_player_elo_away = df_player_elo[df_player_elo["indicator"] == "away"].drop(columns=["indicator"])
+        for column in df_team_profiles_lin_reg_home.columns:
+            if column in ["game_id"]: continue
+            df_player_elo_home = df_player_elo_home.rename(columns={column: column+"_home"})
+            df_player_elo_away = df_player_elo_away.rename(columns={column: column+"_away"})
+
+
         df_relationships = cls._read_parquet('./data/silver/relationships/*')
         df_team_elo = cls._read_parquet('./data/silver/team_elo/*')[feature_columns.get("df_team_elo")]
 
@@ -54,6 +66,8 @@ class IngestorV1:
         df_feature = df_feature.merge(df_team_profiles_lin_reg_away, on=["game_id"], how="inner")
         df_feature = df_feature.merge(df_relationships, on=["game_id"], how="inner")
         df_feature = df_feature.merge(df_team_elo, on=["game_id"], how="inner")
+        df_feature = df_feature.merge(df_player_elo_home, on=["game_id"], how="inner")
+        df_feature = df_feature.merge(df_player_elo_away, on=["game_id"], how="inner")
 
         df_feature["kick_off_seconds"] = df_feature["kick_off_time"].str.split(":").str[0].astype(float) + df_feature["kick_off_time"].str.split(":").str[0].astype(float) * 60
         df_feature = df_feature.drop(columns=feature_columns.get("drop"))
@@ -65,7 +79,7 @@ class IngestorV1:
         df_feature["weekday"] = tf.keras.utils.to_categorical(df_feature["weekday"].factorize()[0])
         df_feature["league_code"] = tf.keras.utils.to_categorical(df_feature["league_code"].factorize()[0])
         df_feature["kick_off_date_home"] = pd.to_numeric(df_feature["kick_off_date_home"])
-
+        df_feature = df_feature[df_feature["match_day"]>=5]
         cls._write_parquet(df_feature, './data/gold/model_ingestion_v1/model_ingestion_v1.parquet')
 
 

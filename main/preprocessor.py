@@ -458,7 +458,6 @@ class Preprocessor:
         #print(df_team_rating_agg)
         cls._write_parquet(df_team_rating_agg, './data/silver/team_ratings/team_ratings.parquet')
 
-
     @classmethod
     def _referee_profiles(cls):
         df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id","referee","kick_off_date"]]
@@ -548,8 +547,6 @@ class Preprocessor:
     def _player_elo(cls):
         df_match_info = cls._read_parquet('./data/silver/match_info/*')[["game_id", "kick_off_date"]]
         df_player_stats = cls._read_parquet('./data/silver/player_stats/*')[["game_id", "player_name", "indicator"]]
-
-
         df_team_stats = cls._read_parquet('./data/silver/team_stats/*')
         df_team_stats = df_team_stats.merge(df_match_info, on=["game_id"], how="inner")
 
@@ -564,11 +561,26 @@ class Preprocessor:
                                                                                                   ascending=True)
         goal_data = df_player_stats.merge(goal_data, on=["game_id"], how="inner")
 
-        df_player_elo = cls._read_parquet('./data/silver/player_elo/*')[["player_name", "kick_off_date", "new_player_elo"]]
-        print(df_player_elo.to_dict('records'))
-        return
+        df_player_elo = cls._read_parquet('./data/silver/player_elo/*')[["game_id", "player_name", "kick_off_date", "new_player_elo","opponnent_elo","old_player_elo"]]
+
+        new_data = goal_data.merge(df_player_elo[["game_id", "player_name"]], on=["game_id","player_name"], how = 'outer', indicator = True)
+
+        goal_data = new_data[~(new_data._merge == 'both')]
+
+        player_elo_dict = dict()
+        for idx, row in tqdm(df_player_elo.iterrows()):
+            player_name = row["player_name"]
+            kick_off_date = row["kick_off_date"]
+            new_player_elo = row["new_player_elo"]
+            opponnent_elo = row["opponnent_elo"]
+            old_player_elo = row["old_player_elo"]
+            if player_elo_dict.get(player_name) is None: player_elo_dict[player_name] = dict()
+            if player_elo_dict.get(player_name).get(kick_off_date) is None: player_elo_dict[player_name][kick_off_date] = dict()
+            player_elo_dict[player_name][kick_off_date]["player_elo"] = new_player_elo
+            player_elo_dict[player_name][kick_off_date]["opponnent_elo"] = opponnent_elo
+            player_elo_dict[player_name][kick_off_date]["old_player_elo"] = old_player_elo
+
         game_elo_dict = {}
-        player_elo_dict = {}
         elo_list = []
         for idx, row in tqdm(goal_data.iterrows()):
             game_id = row["game_id"]
@@ -578,20 +590,40 @@ class Preprocessor:
             home_goals = row["home_goals"]
             away_goals = row["away_goals"]
 
-
+            # check if already calculated
+            new_player_elo = None
+            try:
+                new_player_elo = player_elo_dict[player_name][kick_off_date]["player_elo"]
+                opponnent_elo = player_elo_dict[player_name][kick_off_date]["opponnent_elo"]
+                player_elo = player_elo_dict[player_name][kick_off_date]["old_player_elo"]
+                elo_list.append({"game_id": game_id, "kick_off_date": kick_off_date, "player_name": player_name,
+                                 "old_player_elo": player_elo, "new_player_elo": new_player_elo,
+                                 "opponnent_elo": opponnent_elo, "home_goals": home_goals,
+                                 "away_goals": away_goals, "indicator": indicator})
+            except KeyError:
+                pass
+            if new_player_elo is None:
+                continue
             df_player = goal_data.loc[goal_data['player_name'] == player_name]
             df_player['p_kick_off_date'] = df_player["kick_off_date"].shift(1)
             last_game_date = df_player.loc[df_player['game_id'] == game_id]["p_kick_off_date"].iloc[0]
             if player_elo_dict.get(player_name) is None: player_elo_dict[player_name] = dict()
-            if player_elo_dict.get(player_name).get(last_game_date) is None: player_elo_dict[player_name][last_game_date] = 1300
-            player_elo = player_elo_dict.get(player_name).get(last_game_date)
+            if player_elo_dict.get(player_name).get(last_game_date) is None:
+                player_elo_dict[player_name][last_game_date] = dict()
+                player_elo_dict[player_name][last_game_date]["player_elo"] = 1300
+                #print("could not find ", player_name, " last_game_date=" , last_game_date)
+            player_elo = player_elo_dict.get(player_name).get(last_game_date).get("player_elo")
 
             if indicator == "home": opponent_indicator = "away"
             else: opponent_indicator = "home"
             try:
                 opponnent_elo = game_elo_dict[game_id][opponent_indicator]
             except KeyError:
-                opponnent_elo = None
+                try:
+                    opponnent_elo = player_elo_dict[player_name][last_game_date]["opponnent_elo"]
+                except KeyError:
+                    opponnent_elo = None
+
             if opponnent_elo is None:
                 opponnent_elo = 0
                 opponent_players = goal_data.loc[goal_data["game_id"] == game_id]
@@ -601,16 +633,19 @@ class Preprocessor:
                     df_opponent_player['p_kick_off_date'] = df_opponent_player["kick_off_date"].shift(1)
                     last_game_date =  df_opponent_player.loc[df_opponent_player['game_id'] == game_id]["p_kick_off_date"].iloc[0]
                     if player_elo_dict.get(opponent_player) is None: player_elo_dict[opponent_player] = dict()
-                    if player_elo_dict.get(opponent_player).get(last_game_date) is None: player_elo_dict[opponent_player][last_game_date] = 1300
-                    opponnent_elo += player_elo_dict.get(opponent_player).get(last_game_date)
+                    if player_elo_dict.get(opponent_player).get(last_game_date) is None:
+                        player_elo_dict[opponent_player][last_game_date] = dict()
+                        player_elo_dict[opponent_player][last_game_date]["player_elo"] = 1300
+                    opponnent_elo += player_elo_dict.get(opponent_player).get(last_game_date).get("player_elo")
                 opponnent_elo = opponnent_elo/len(opponent_players)
 
             new_player_elo, new_opponnent_elo = EloCalculator.calculcate_new_elos(player_elo, opponnent_elo, home_goals, away_goals)
-            player_elo_dict[player_name][kick_off_date] = new_player_elo
+            player_elo_dict[player_name][kick_off_date]["player_elo"] = new_player_elo
             elo_list.append({"game_id": game_id, "kick_off_date": kick_off_date, "player_name": player_name,
                              "old_player_elo": player_elo, "new_player_elo": new_player_elo,"opponnent_elo":opponnent_elo,"home_goals": home_goals,
-                             "away_goals": away_goals})
+                             "away_goals": away_goals, "indicator":indicator})
         df_elo = pd.DataFrame(elo_list)
+        df_elo = pd.concat(df_elo, df_player_elo)
         cls._write_parquet(df_elo, './data/silver/player_elo/player_elo.parquet')
 
     @classmethod

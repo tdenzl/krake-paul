@@ -16,8 +16,9 @@ import glob
 
 N_CLASS = 3
 N_FEATURES = 0
-TEST_SIZE = 0.2
-EPOCHS = 100
+TEST_SIZE = 0.3
+EPOCHS = 250
+
 
 class ModelV1:
 
@@ -31,7 +32,7 @@ class ModelV1:
         labels = df_ingestion["outcome"]
         labels = tf.keras.utils.to_categorical(labels)
 
-        df_features = df_ingestion.drop(columns=["outcome"])
+        df_features = df_ingestion.drop(columns=["outcome","game_id"])
         for column in df_features.columns:
             df_features[column] = df_features[column].astype('float32')
         N_FEATURES = len(df_features.columns)
@@ -60,8 +61,23 @@ class ModelV1:
         # Evaluate neural network performance
         model.evaluate(x_test, y_test, verbose='auto')
 
+        # Evaluate neural network performance
+        predictions = model.predict(df_features)
+        prediction_list = []
+        for prediction in predictions:
+            prediction_list.append({"prediction_1":prediction[0],"prediction_X":prediction[1],"prediction_2":prediction[2]})
+        df_predictions = pd.DataFrame(prediction_list)
+        df_predictions["game_id"] = df_ingestion["game_id"]
+
+        df_match = cls._read_parquet('./data/silver/team_elo/*')[["game_id","season_start","matchday","home_elo","away_elo","home_team","away_team","home_goals","away_goals"]]
+        df_match['outcome'] = np.where(df_match['home_goals'] == df_match['away_goals'], "X",
+                                            np.where(df_match['home_goals'] > df_match['away_goals'], "1", "2"))
+
+        df_predictions = df_match.merge(df_predictions, on=["game_id"], how="inner")
+
+        cls._write_parquet(df_predictions, './data/gold/predictions/model_predictions_v1.parquet')
         # Save model to file
-        model.save("./models/krake_paul_v2")
+        model.save("./models/krake_paul_v1")
 
     @classmethod
     def _read_parquet(cls, base_path):

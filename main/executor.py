@@ -29,7 +29,7 @@ class Executor:
         #self._scrape_kicker_data_multiprocessing()
         #self._scrape_fifa_rating_data()
         #self._preprocess()
-        self._ingestion()
+        #self._ingestion()
         self._train()
 
 
@@ -89,9 +89,9 @@ class Executor:
 
 
     def _ingestion(self):
-        #IngestorV1.create_ingestion_data()
-        IngestorV2.create_ingestion_data()
+        IngestorV1.create_ingestion_data()
+        #IngestorV2.create_ingestion_data()
 
     def _train(self):
-        #ModelV1.train()
-        ModelV2.train()
+        ModelV1.train()
+        #ModelV2.train()
