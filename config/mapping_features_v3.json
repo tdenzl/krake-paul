@@ -1,0 +1,11 @@
+{
+  "df_match_info": ["game_id","kick_off_time","match_day","weekday"],
+  "df_coach_elo": ["game_id","home_elo","away_elo"],
+  "df_referee_profiles": ["game_id","cards_home_intercept","cards_away_intercept","goal_diff_intercept"],
+  "df_team_elo": ["game_id","home_elo","away_elo","home_goals","away_goals"],
+  "df_player_elo": ["game_id","indicator","old_player_elo"],
+  "drop": ["kick_off_date_away","kick_off_date_away","modify_timestamp","modify_timestamp_away","modify_timestamp_home", "kick_off_time"],
+  "reg_cols": ["shots_on_goal", "distance", "total_passes", "pass_ratio", "crosses", "cross_ratio", "dribblings",
+         "dribble_ratio", "possession", "tackles", "tackle_ratio", "air_tackles", "air_tackle_ratio", "fouls",
+         "got_fouled", "offside", "corners", "elo_gain", "goals"]
+}

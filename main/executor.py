@@ -6,9 +6,11 @@ from .preprocessor import Preprocessor
 from .ingestor_v1 import IngestorV1
 from .model_train_v1 import ModelV1
 
-
 from .ingestor_v2 import IngestorV2
 from .model_train_v2 import ModelV2
+
+from .ingestor_v3 import IngestorV3
+from .model_train_v3 import ModelV3
 
 from multiprocessing import Pool
 import os
@@ -30,7 +32,8 @@ class Executor:
         #self._scrape_fifa_rating_data()
         #self._preprocess()
         #self._ingestion()
-        self._train()
+        #self._train()
+        self._predict()
 
 
     def _scrape_kicker_data(self, load_type="latest"):
@@ -89,9 +92,17 @@ class Executor:
 
 
     def _ingestion(self):
-        IngestorV1.create_ingestion_data()
+        #IngestorV1.create_ingestion_data()
         #IngestorV2.create_ingestion_data()
+        IngestorV3.create_ingestion_data()
+
 
     def _train(self):
-        ModelV1.train()
+        #ModelV1.train()
         #ModelV2.train()
+        ModelV3.train()
+
+    def _predict(self):
+        #ModelV1.train()
+        #ModelV2.train()
+        ModelV3.predict()

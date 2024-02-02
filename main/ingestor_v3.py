@@ -15,14 +15,14 @@ import Levenshtein
 import tensorflow as tf
 from sklearn.preprocessing import LabelEncoder
 
-class IngestorV1:
+class IngestorV3:
 
     def __init__(self):
         self.load_timestamp = str(datetime.now())
 
     @classmethod
     def create_ingestion_data(cls):
-        feature_columns = json.load(open('./config/mapping_features.json', 'r'))
+        feature_columns = json.load(open('./config/mapping_features_v3.json', 'r'))
 
         df_match_info = cls._read_parquet('./data/silver/match_info/*')[feature_columns.get("df_match_info")]
 
@@ -31,13 +31,15 @@ class IngestorV1:
         df_referee_profiles = cls._read_parquet('./data/silver/referee_profiles/*')[feature_columns.get("df_referee_profiles")]
 
         df_team_profiles_lin_reg = cls._read_parquet('./data/silver/team_profiles_lin_reg/*').drop(columns=["team_name"])
-        print(df_team_profiles_lin_reg.columns)
         df_team_profiles_lin_reg_home = df_team_profiles_lin_reg[df_team_profiles_lin_reg["indicator"]=="home"].drop(columns=["indicator"])
         df_team_profiles_lin_reg_away = df_team_profiles_lin_reg[df_team_profiles_lin_reg["indicator"]=="away"].drop(columns=["indicator"])
+
         for column in df_team_profiles_lin_reg_home.columns:
             if column in ["game_id","indicator"]: continue
             df_team_profiles_lin_reg_home = df_team_profiles_lin_reg_home.rename(columns={column:column+"_home"})
             df_team_profiles_lin_reg_away = df_team_profiles_lin_reg_away.rename(columns={column:column+"_away"})
+
+        df_player_elo = cls._read_parquet('./data/silver/player_elo/*')[feature_columns.get("df_player_elo")]
         df_player_elo = df_player_elo.groupby(['game_id', 'indicator']).agg(
             player_elo_mean=('old_player_elo', np.mean),
             player_elo_stdev=('old_player_elo', np.std)).reset_index()
@@ -67,6 +69,12 @@ class IngestorV1:
         df_feature = df_feature.merge(df_player_elo_home, on=["game_id"], how="inner")
         df_feature = df_feature.merge(df_player_elo_away, on=["game_id"], how="inner")
 
+        for regression_type in feature_columns.get("reg_cols"):
+            for indicator in ["home", "away"]:
+                if indicator == "home": df_feature["exp_"+regression_type+"_"+indicator] = (df_feature[regression_type+"_coefficient_"+indicator] * (df_feature["home_elo"] - df_feature["away_elo"])) + df_feature[regression_type+"_intercept_"+indicator]
+                if indicator == "away": df_feature["exp_"+regression_type+"_"+indicator] = (df_feature[regression_type+"_coefficient_"+indicator] * (df_feature["away_elo"] - df_feature["home_elo"])) + df_feature[regression_type+"_intercept_"+indicator]
+                df_feature = df_feature.drop(columns=[regression_type+"_coefficient_"+indicator, regression_type+"_intercept_"+indicator])
+
         df_feature["kick_off_seconds"] = df_feature["kick_off_time"].str.split(":").str[0].astype(float) + df_feature["kick_off_time"].str.split(":").str[0].astype(float) * 60
         df_feature = df_feature.drop(columns=feature_columns.get("drop"))
         for column in df_feature.columns:
@@ -75,10 +83,9 @@ class IngestorV1:
         #df_feature["outcome"] = tf.keras.utils.to_categorical(df_feature["outcome"])
 
         df_feature["weekday"] = tf.keras.utils.to_categorical(df_feature["weekday"].factorize()[0])
-        df_feature["league_code"] = tf.keras.utils.to_categorical(df_feature["league_code"].factorize()[0])
         df_feature["kick_off_date_home"] = pd.to_numeric(df_feature["kick_off_date_home"])
         df_feature = df_feature[df_feature["match_day"]>=5]
-        cls._write_parquet(df_feature, './data/gold/model_ingestion_v1/model_ingestion_v1.parquet')
+        cls._write_parquet(df_feature, './data/gold/model_ingestion_v3/model_ingestion_v3.parquet')
 
 
     @classmethod

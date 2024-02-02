@@ -1,5 +1,5 @@
 {
-  "df_match_info": ["game_id","kick_off_time","league_code","match_day","weekday","referee"],
+  "df_match_info": ["game_id","kick_off_time","match_day","weekday","referee"],
   "df_coach_elo": ["game_id","home_elo","away_elo"],
   "df_referee_profiles": ["game_id","cards_home_intercept","cards_home_coefficient","cards_away_intercept","cards_away_coefficient","cards_diff_intercept","cards_diff_coefficient","goal_diff_intercept","goal_diff_coefficient","hxa_intercept","hxa_coefficient"],
   "df_team_elo": ["game_id","home_elo","away_elo","home_goals","away_goals"],
