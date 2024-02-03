@@ -12,6 +12,9 @@ from .model_train_v2 import ModelV2
 from .ingestor_v3 import IngestorV3
 from .model_train_v3 import ModelV3
 
+from .betmaker import BetMaker
+
+
 from multiprocessing import Pool
 import os
 import json
@@ -33,7 +36,8 @@ class Executor:
         #self._preprocess()
         #self._ingestion()
         #self._train()
-        self._predict()
+        #self._predict()
+        self._evaluate()
 
 
     def _scrape_kicker_data(self, load_type="latest"):
@@ -106,3 +110,6 @@ class Executor:
         #ModelV1.train()
         #ModelV2.train()
         ModelV3.predict()
+
+    def _evaluate(self):
+        BetMaker.evaluate_bets()
