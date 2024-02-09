@@ -14,12 +14,12 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import glob
 
-N_CLASS = 3
+N_CLASS = 2
 N_FEATURES = 0
 TEST_SIZE = 0.3
-EPOCHS = 200
+EPOCHS = 100
 
-class ModelV3:
+class ModelV4:
 
     def __init__(self):
         self.load_timestamp = str(datetime.now())
@@ -28,10 +28,11 @@ class ModelV3:
     def train(cls):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         df_ingestion = cls._read_parquet('./data/gold/model_ingestion_v3/*')
-        labels = df_ingestion["outcome"]
+        label_column = "corner_over_10_5"
+        labels = df_ingestion[label_column]
         labels = tf.keras.utils.to_categorical(labels)
 
-        drop_cols = ["game_id", "corner_over_11_5", "corner_over_10_5", "corner_over_9_5", "corner_over_8_5", "outcome"]
+        drop_cols = ["game_id", "corner_over_11_5", "corner_over_10_5", "corner_over_9_5", "corner_over_8_5", "outcome","total_corners"]
         df_features = df_ingestion.drop(columns=drop_cols)
         print(df_features.columns)
 
@@ -64,7 +65,7 @@ class ModelV3:
         model.evaluate(x_test, y_test, verbose='auto')
 
         # Save model to file
-        model.save("./models/krake_paul_v3")
+        model.save("./models/krake_paul_v4")
 
     @classmethod
     def _read_parquet(cls, base_path):
@@ -113,11 +114,11 @@ class ModelV3:
 
     @classmethod
     def predict(cls):
-        model = tf.keras.models.load_model("./models/krake_paul_v3")
+        model = tf.keras.models.load_model("./models/krake_paul_v4")
 
         df_ingestion = cls._read_parquet('./data/gold/model_ingestion_v3/*')
 
-        drop_cols = ["game_id", "corner_over_11_5", "corner_over_10_5", "corner_over_9_5", "corner_over_8_5", "outcome"]
+        drop_cols = ["game_id", "corner_over_11_5", "corner_over_10_5", "corner_over_9_5", "corner_over_8_5", "outcome","total_corners"]
         df_features = df_ingestion.drop(columns=drop_cols)
 
         for column in df_features.columns:
@@ -127,18 +128,20 @@ class ModelV3:
         predictions = model.predict(df_features)
         prediction_list = []
         for prediction in predictions:
-            prediction_list.append({"prediction_1":prediction[0],"prediction_X":prediction[1],"prediction_2":prediction[2]})
+            prediction_list.append({"prediction_over":prediction[0], "prediction_under":prediction[1]})
         df_predictions = pd.DataFrame(prediction_list)
         df_predictions["game_id"] = df_ingestion["game_id"]
 
         df_match = cls._read_parquet('./data/silver/team_elo/*')[["game_id","season_start","matchday","home_elo","away_elo","home_team","away_team","home_goals","away_goals"]]
-        df_match['outcome'] = np.where(df_match['home_goals'] == df_match['away_goals'], "X",
-                                            np.where(df_match['home_goals'] > df_match['away_goals'], "1", "2"))
 
-        df_predictions = df_match.merge(df_predictions, on=["game_id"], how="inner")
+        df_match_stats = cls._read_parquet('./data/silver/team_stats/*').groupby(['game_id']).agg(total_corners=('corners', np.sum)).reset_index()
 
-        df_predictions['exp_odd_1'] = 1.06/ df_predictions["prediction_1"]
-        df_predictions['exp_odd_X'] = 1.06 / df_predictions["prediction_X"]
-        df_predictions['exp_odd_2'] = 1.06 / df_predictions["prediction_2"]
 
-        cls._write_parquet(df_predictions, './data/gold/predictions/model_predictions_v3.parquet')
+        df_predictions = df_predictions.merge(df_match, on=["game_id"], how="inner")
+        df_predictions = df_predictions.merge(df_match_stats, on=["game_id"], how="inner")
+
+
+        df_predictions['odd_over'] = 1.06/ df_predictions["prediction_over"]
+        df_predictions['odd_under'] = 1.06 / df_predictions["prediction_under"]
+
+        cls._write_parquet(df_predictions, './data/gold/predictions/model_predictions_v4.parquet')

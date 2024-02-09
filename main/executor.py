@@ -12,6 +12,8 @@ from .model_train_v2 import ModelV2
 from .ingestor_v3 import IngestorV3
 from .model_train_v3 import ModelV3
 
+from .model_train_v4 import ModelV4
+
 from .betmaker import BetMaker
 
 
@@ -35,9 +37,9 @@ class Executor:
         #self._scrape_fifa_rating_data()
         #self._preprocess()
         #self._ingestion()
-        #self._train()
-        #self._predict()
-        self._evaluate()
+        self._train()
+        self._predict()
+        #self._evaluate()
 
 
     def _scrape_kicker_data(self, load_type="latest"):
@@ -104,12 +106,14 @@ class Executor:
     def _train(self):
         #ModelV1.train()
         #ModelV2.train()
-        ModelV3.train()
+        #ModelV3.train()
+        ModelV4.train()
 
     def _predict(self):
         #ModelV1.train()
         #ModelV2.train()
-        ModelV3.predict()
+        #ModelV3.predict()
+        ModelV4.predict()
 
     def _evaluate(self):
         BetMaker.evaluate_bets()

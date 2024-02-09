@@ -248,7 +248,7 @@ class Preprocessor:
 
                     X = df_team_stat_pit_col["elo_diff"].values.reshape((-1, 1))
                     y = df_team_stat_pit_col[lin_reg_col]
-                    weights = df_team_stat_pit_col["q_weight"]
+                    weights = df_team_stat_pit_col["norm_weight"]
                     reg = linear_model.LinearRegression().fit(X, y, weights)
                     # print("intercept=", reg.intercept_, " coefficient=", reg.coef_)
                     df_team_stat_entry[lin_reg_col + "_intercept"] = reg.intercept_

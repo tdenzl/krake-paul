@@ -30,6 +30,9 @@ class IngestorV3:
 
         df_referee_profiles = cls._read_parquet('./data/silver/referee_profiles/*')[feature_columns.get("df_referee_profiles")]
 
+        df_match_stats = cls._read_parquet('./data/silver/team_stats/*').groupby(['game_id']).agg(total_corners=('corners', np.sum)).reset_index()
+
+
         df_team_profiles_lin_reg = cls._read_parquet('./data/silver/team_profiles_lin_reg/*').drop(columns=["team_name"])
         df_team_profiles_lin_reg_home = df_team_profiles_lin_reg[df_team_profiles_lin_reg["indicator"]=="home"].drop(columns=["indicator"])
         df_team_profiles_lin_reg_away = df_team_profiles_lin_reg[df_team_profiles_lin_reg["indicator"]=="away"].drop(columns=["indicator"])
@@ -58,6 +61,8 @@ class IngestorV3:
         df_team_elo['outcome'] = np.where(df_team_elo['goal_diff'] < 0, 2,
                                             np.where(df_team_elo['goal_diff'] > 0, 0, 1))
 
+
+
         df_team_elo = df_team_elo.drop(columns=["home_goals","away_goals","goal_diff"])
 
         df_feature = df_match_info.merge(df_coach_elo, on = ["game_id"], how = "inner")
@@ -68,6 +73,12 @@ class IngestorV3:
         df_feature = df_feature.merge(df_team_elo, on=["game_id"], how="inner")
         df_feature = df_feature.merge(df_player_elo_home, on=["game_id"], how="inner")
         df_feature = df_feature.merge(df_player_elo_away, on=["game_id"], how="inner")
+        df_feature = df_feature.merge(df_match_stats, on=["game_id"], how="inner")
+
+        df_feature['corner_over_11_5'] = np.where(df_feature['total_corners'] > 11.5, 1, 0)
+        df_feature['corner_over_10_5'] = np.where(df_feature['total_corners'] > 10.5, 1, 0)
+        df_feature['corner_over_9_5'] = np.where(df_feature['total_corners'] > 9.5, 1, 0)
+        df_feature['corner_over_8_5'] = np.where(df_feature['total_corners'] > 8.5, 1, 0)
 
         for regression_type in feature_columns.get("reg_cols"):
             for indicator in ["home", "away"]:
