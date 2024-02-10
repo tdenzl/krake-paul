@@ -18,4 +18,4 @@ main/model_train_v3.py -> over under 10.5 corner
 main/betmaker.py
 
 ## Medium Article
-Make sure to also check out the accompanying [Medium article]()
+Make sure to also check out the accompanying [Medium article](https://tim-denzler.medium.com/beating-the-octopus-predicting-football-matches-using-elo-linear-regression-and-cnns-c8eba8921cd7)
