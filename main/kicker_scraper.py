@@ -46,9 +46,6 @@ class KickerScraper:
                     start_matchday = matchday+1
             self._save(season, start_matchday, matchday)
 
-    def _get_current_season_matchday(self):
-        #@TODO: method that returns the current season and matchday to avoid parsing the last day over and over again
-        return
 
     def _check_team_stats_available(self, season):
         #check for first match of season if it has team stats

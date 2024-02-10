@@ -84,9 +84,7 @@ class Executor:
 
 
     def _ingestion(self):
-        #IngestorV1.create_ingestion_data()
-        #IngestorV2.create_ingestion_data()
-        IngestorV3.create_ingestion_data()
+        Ingestor.create_ingestion_data()
 
 
     def _train(self):
