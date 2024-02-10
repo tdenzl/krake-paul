@@ -1,4 +1,4 @@
-# Krake Paul - Predicting football outcomes
+# Krake Paul - Predicting football outcomes 👟⚽
 
 This repository conatains a Python application for scraping, preprocessing and analyzing football data
 
