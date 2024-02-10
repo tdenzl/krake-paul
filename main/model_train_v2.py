@@ -27,7 +27,7 @@ class ModelV2:
     @classmethod
     def train(cls):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        df_ingestion = cls._read_parquet('./data/gold/model_ingestion_v2/*')
+        df_ingestion = cls._read_parquet('./data/gold/model_ingestion/*')
         labels = df_ingestion["outcome"]
         labels = tf.keras.utils.to_categorical(labels)
 
