@@ -16,7 +16,8 @@ import glob
 class KickerScraper:
 
     def __init__(self, league, start_season, end_season, matchdays=None):
-        self.base_url = "https://www.kicker.de"
+        self.base_url = "https://www.example.de"
+        # !!!  url changed due to legal implications !!!
         self.league = league
         self.start_season = start_season
         self.end_season = end_season

@@ -19,7 +19,8 @@ class FifaScraper:
         self.year = year
         self.last_page = json.load(open('./config/mapping_fifa.json', 'r')).get(str(year)).get("last_page")
         self.fifa_ratings_columns = json.load(open('./config/mapping_fifa_ratings.json', 'r'))
-        self.base_url = "https://fifaindex.com/players/fifa" + str(year)
+        self.base_url = "https://example.com/players/fifa" + str(year)
+        # !!!  url changed due to legal implications !!!
         self.profile_links = set()
         # data dicts
         self.player_ratings = []
@@ -53,7 +54,8 @@ class FifaScraper:
 
     def _get_player_stats(self, player_url):
         if "fifa" + str(self.year) not in player_url: player_url = player_url + "fifa" + str(self.year)
-        player_page = requests.get("https://fifaindex.com" + player_url)
+        player_page = requests.get("https://example.com" + player_url)
+        # !!!  url changed due to legal implications !!!
         soup = BeautifulSoup(player_page.content, 'html.parser')
         player_id = player_url.split("/")[2]
         player_dict = {"fifa": self.year,"player_id":player_id, "preferred_position_1":None, "preferred_position_2":None, "preferred_position_3":None,"preferred_position_4":None, "team_link": None,"team_name":None, "national_team_link": None, "national_team_name":None}
